@@ -5,16 +5,22 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Maison Hazparne</title>
   <meta name="description" content="Planning partagé de la maison de famille à Hazparne">
-  <meta name="theme-color" content="#f7f3ec" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#1b1a18" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121314" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Hazparne">
   <meta name="format-detection" content="telephone=no">
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
   <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
   <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..600,100,0&family=Hanken+Grotesk:wght@400..700&display=swap">
+  <link rel="preload" as="image" href="images/maison.webp" type="image/webp">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
@@ -26,21 +32,26 @@
   </div>
 
   <!-- Écran du code d'accès -->
-  <div id="screen-login" class="screen center-screen" hidden>
-    <img src="icons/icon-192.png" alt="" class="logo-big">
-    <h1 class="brand">Maison Hazparne</h1>
-    <p class="muted">Planning de la maison de famille</p>
-    <form id="login-form" class="card login-card" autocomplete="off">
-      <label for="login-code" class="label">Code d'accès</label>
-      <input id="login-code" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrez le code" required>
-      <p id="login-error" class="error" hidden></p>
-      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Entrer</button>
-      <p class="small muted">Le code est mémorisé sur ce téléphone. Les majuscules et les tirets n'ont pas d'importance.</p>
-    </form>
-    <div id="create-space" class="card login-card" hidden>
-      <p><strong>Créer un nouvel espace</strong></p>
-      <p class="small muted">À n'utiliser qu'une seule fois, lors de l'installation. Un nouveau planning vide sera créé avec le code saisi ci-dessus.</p>
-      <button type="button" class="btn btn-block" id="create-space-btn">Créer l'espace avec ce code</button>
+  <div id="screen-login" class="screen login-screen" hidden>
+    <picture class="hero">
+      <source srcset="images/maison.webp" type="image/webp">
+      <img src="images/maison.jpg" alt="La maison d'Hazparne sous le ciel bleu" width="1080" height="1920" fetchpriority="high">
+    </picture>
+    <div class="login-body">
+      <form id="login-form" class="card login-card" autocomplete="off">
+        <h1 class="brand">Maison Hazparne</h1>
+        <p class="welcome">Ongi etorri ! Entrez le code de la famille pour voir qui sera à la maison.</p>
+        <label for="login-code" class="label">Code d'accès</label>
+        <input id="login-code" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrez le code" enterkeyhint="go" required>
+        <p id="login-error" class="error" hidden></p>
+        <button type="submit" class="btn btn-primary btn-block" id="login-btn">Entrer</button>
+        <p class="small muted hint">Le code est mémorisé sur ce téléphone. Majuscules et tirets sans importance.</p>
+      </form>
+      <div id="create-space" class="card login-card" hidden>
+        <p><strong>Créer un nouvel espace</strong></p>
+        <p class="small muted">À n'utiliser qu'une seule fois, lors de l'installation. Un nouveau planning vide sera créé avec le code saisi ci-dessus.</p>
+        <button type="button" class="btn btn-block" id="create-space-btn">Créer l'espace avec ce code</button>
+      </div>
     </div>
   </div>
 
@@ -118,7 +129,7 @@
         </form>
         <div class="card">
           <div class="label">Ajouter à l'écran d'accueil</div>
-          <p class="small"><strong>iPhone (Safari)</strong> : touchez le bouton Partager <span aria-hidden="true">⬆︎</span>, puis « Sur l'écran d'accueil ».<br>
+          <p class="small"><strong>iPhone (Safari)</strong> : touchez le bouton Partager <span aria-hidden="true">(carré avec une flèche)</span>, puis « Sur l'écran d'accueil ».<br>
           <strong>Android (Chrome)</strong> : touchez le menu ⋮, puis « Ajouter à l'écran d'accueil » ou « Installer l'application ».</p>
         </div>
         <div class="card">
@@ -137,10 +148,10 @@
     </div>
 
     <nav class="tabbar">
-      <button class="tabbtn active" data-tab="calendar"><span class="tabicon">📅</span>Calendrier</button>
-      <button class="tabbtn" data-tab="stays"><span class="tabicon">🧳</span>Séjours</button>
-      <button class="tabbtn" data-tab="family"><span class="tabicon">👪</span>Famille</button>
-      <button class="tabbtn" data-tab="settings"><span class="tabicon">⚙️</span>Réglages</button>
+      <button class="tabbtn active" data-tab="calendar"><span class="tabicon"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span>Calendrier</button>
+      <button class="tabbtn" data-tab="stays"><span class="tabicon"><svg viewBox="0 0 24 24"><rect x="4" y="7.5" width="16" height="12.5" rx="3"/><path d="M9 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2M4 13h16"/></svg></span>Séjours</button>
+      <button class="tabbtn" data-tab="family"><span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9.5" r="2.5"/><path d="M16.5 14.6c2.3.2 4 1.6 4.5 4.4"/></svg></span>Famille</button>
+      <button class="tabbtn" data-tab="settings"><span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></span>Réglages</button>
     </nav>
   </div>
 

@@ -1,10 +1,17 @@
 import * as store from "./store.js";
 
 /* ---------- Constantes & utilitaires ---------- */
+// Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
+// enregistrées sont converties à l'affichage vers leur équivalent doux.
 const COLORS = [
-  "#c8102e", "#00843d", "#1f6fb2", "#e67e22", "#8e44ad", "#d4a017", "#16a085",
-  "#e84393", "#6d4c41", "#34495e", "#7cb342", "#00acc1", "#f4511e", "#5c6bc0"
+  "#e07a6c", "#5fae84", "#5b9bd5", "#eba15c", "#a98bd0", "#dcbb52", "#45a8a0",
+  "#e58bb4", "#b08b70", "#7d8ea3", "#9cc56a", "#5ec2d6", "#f2a7a0", "#8a8fd8"
 ];
+const LEGACY = {
+  "#c8102e": 0, "#00843d": 1, "#1f6fb2": 2, "#e67e22": 3, "#8e44ad": 4, "#d4a017": 5, "#16a085": 6,
+  "#e84393": 7, "#6d4c41": 8, "#34495e": 9, "#7cb342": 10, "#00acc1": 11, "#f4511e": 12, "#5c6bc0": 13
+};
+const col = (c) => (c && LEGACY[c.toLowerCase()] != null ? COLORS[LEGACY[c.toLowerCase()]] : c) || "#9aa0a6";
 const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const WEEKDAYS_SHORT = ["L", "M", "M", "J", "V", "S", "D"];
 const LS_SPACE = "mh.space";
@@ -207,7 +214,7 @@ function renderWhoami() {
   const cur = lsGet(LS_ME);
   list.innerHTML = state.members.map(m => `
     <button class="whoami-btn ${m.id === cur ? "selected" : ""}" data-id="${esc(m.id)}">
-      <span class="dot" style="background:${esc(m.color)}"></span>${esc(m.name)}
+      <span class="dot" style="background:${esc(col(m.color))}"></span>${esc(m.name)}
     </button>`).join("");
   $("#whoami-empty").hidden = state.members.length > 0;
 }
@@ -270,7 +277,7 @@ function renderAll() {
   if (!state.spaceId) return;
   const m = me();
   $("#me-chip").innerHTML = m
-    ? `<span class="dot" style="background:${esc(m.color)}"></span>${esc(m.name)}`
+    ? `<span class="dot" style="background:${esc(col(m.color))}"></span>${esc(m.name)}`
     : `<span class="dot" style="background:var(--border)"></span>Je suis…`;
   $("#settings-me").textContent = m ? m.name : "Non choisi";
   $("#year-label").textContent = state.year;
@@ -304,7 +311,7 @@ function staysByDay(year) {
 
 function renderLegend() {
   $("#legend").innerHTML = state.members.length
-    ? state.members.map(m => `<span class="legend-item"><span class="dot" style="background:${esc(m.color)}"></span>${esc(m.name)}</span>`).join("")
+    ? state.members.map(m => `<span class="legend-item"><span class="dot" style="background:${esc(col(m.color))}"></span>${esc(m.name)}</span>`).join("")
     : `<span class="muted">Ajoutez les membres de la famille dans l'onglet « Famille ».</span>`;
 }
 
@@ -332,8 +339,16 @@ function renderCalendar() {
       if (ds < today) cls.push("past");
       if (here.length) cls.push("busy");
       if (state.selStart === ds) cls.push("sel-start");
+      if (here.length) {
+        // Pastille continue sur les jours occupés consécutifs (dans la même semaine).
+        const prevBusy = wd > 0 && d > 1 && (map.get(ymd(y, m, d - 1)) || []).length;
+        const nextBusy = wd < 6 && d < nDays && (map.get(ymd(y, m, d + 1)) || []).length;
+        if (!prevBusy) cls.push("rs");
+        if (!nextBusy) cls.push("re");
+      }
+      const shown = here.slice(0, 4);
       const bars = here.length
-        ? `<div class="bars">${here.map(x => `<span style="background:${esc(memberById(x.memberId)?.color || "#999")}"></span>`).join("")}</div>`
+        ? `<div class="bars">${shown.map(x => `<span style="background:${esc(col(memberById(x.memberId)?.color))}"></span>`).join("")}${here.length > 4 ? `<em>+${here.length - 4}</em>` : ""}</div>`
         : "";
       const label = `${d} ${MONTHS[m]}${here.length ? " : " + here.map(x => memberById(x.memberId)?.name || "?").join(", ") : ""}`;
       cells += `<button class="${cls.join(" ")}" data-date="${ds}" aria-label="${esc(label)}"><span class="num">${d}</span>${bars}</button>`;
@@ -371,7 +386,7 @@ function renderStays() {
     const mb = memberById(s.memberId);
     html += `
       <button class="stay-item ${s.end < today ? "past" : ""}" data-stay="${esc(s.id)}">
-        <span class="stay-color" style="background:${esc(mb?.color || "#999")}"></span>
+        <span class="stay-color" style="background:${esc(col(mb?.color))}"></span>
         <span class="stay-main">
           <div class="stay-name">${esc(mb?.name || "Personne retirée")}</div>
           <div class="stay-dates">${esc(rangeText(s.start, s.end))}</div>
@@ -428,7 +443,7 @@ function openDaySheet(ds, here) {
     const m = memberById(x.memberId);
     return `
       <div class="person-line">
-        <span class="dot" style="background:${esc(m?.color || "#999")};width:24px;height:24px"></span>
+        <span class="dot" style="background:${esc(col(m?.color))};width:24px;height:24px"></span>
         <div class="info">
           <strong>${esc(m?.name || "Personne retirée")}</strong>
           <div class="small">${esc(rangeText(x.stay.start, x.stay.end))}</div>
@@ -543,13 +558,13 @@ function renderMembers() {
   list.innerHTML = state.members.length
     ? state.members.map(m => `
       <div class="member-row">
-        <span class="dot" style="background:${esc(m.color)}"></span>
+        <span class="dot" style="background:${esc(col(m.color))}"></span>
         <span class="name">${esc(m.name)}</span>
         <button class="btn" data-medit="${esc(m.id)}">Modifier</button>
         <button class="btn btn-danger-ghost" data-mdel="${esc(m.id)}" aria-label="Retirer ${esc(m.name)}">Retirer</button>
       </div>`).join("")
     : `<div class="empty-state">Personne pour l'instant. Ajoutez les membres de la famille ci-dessous.</div>`;
-  const used = new Set(state.members.map(m => m.color));
+  const used = new Set(state.members.map(m => col(m.color)));
   if (!state.newMemberColor || used.has(state.newMemberColor)) state.newMemberColor = COLORS.find(c => !used.has(c)) || COLORS[state.members.length % COLORS.length];
   $("#member-colors").innerHTML = colorGrid(state.newMemberColor);
 }
@@ -585,7 +600,7 @@ $("#members-list").addEventListener("click", async (e) => {
     toast(`${m.name} retiré(e)`);
   } else if (ed) {
     const m = memberById(ed.dataset.medit); if (!m) return;
-    let color = m.color;
+    let color = col(m.color);
     openSheet(`
       <h3>Modifier</h3>
       <form id="medit-form">
@@ -651,6 +666,11 @@ $("#logout-btn").onclick = async () => {
   const ok = await confirmBox("Oublier le code ?", "Il faudra saisir à nouveau le code d'accès sur ce téléphone.", "Oublier");
   if (ok) kickOut();
 };
+
+/* ---------- Clavier : garder le champ du code visible ---------- */
+$("#login-code").addEventListener("focus", () => {
+  setTimeout(() => $("#login-form").scrollIntoView({ behavior: "smooth", block: "end" }), 350);
+});
 
 /* ---------- Démarrage ---------- */
 if ("serviceWorker" in navigator) {

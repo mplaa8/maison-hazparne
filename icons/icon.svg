@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#e3eef3"/>
+  <!-- façade blanche -->
+  <path d="M74 432 V262 L300 130 L438 226 V432 Z" fill="#ffffff"/>
+  <!-- colombages vert foncé -->
+  <path d="M74 282 H438" stroke="#2b535c" stroke-width="16"/>
+  <path d="M202 200 L262 278 L300 138" fill="none" stroke="#2b535c" stroke-width="14" stroke-linejoin="round"/>
+  <path d="M372 246 V432 M406 252 V432" stroke="#2b535c" stroke-width="13"/>
+  <!-- volets + fenêtre -->
+  <rect x="122" y="302" width="36" height="78" rx="4" fill="#2b535c"/>
+  <rect x="158" y="302" width="64" height="78" fill="#b9cfd8"/>
+  <rect x="222" y="302" width="36" height="78" rx="4" fill="#2b535c"/>
+  <!-- balcon en bois -->
+  <path d="M104 342 H276 M104 392 H276" stroke="#2b535c" stroke-width="14" stroke-linecap="round"/>
+  <path d="M130 342 V392 M160 342 V392 M190 342 V392 M220 342 V392 M250 342 V392" stroke="#2b535c" stroke-width="9"/>
+  <!-- fenêtre à droite -->
+  <rect x="300" y="304" width="46" height="70" rx="4" fill="#2b535c"/>
+  <!-- toit asymétrique en tuiles -->
+  <path d="M44 258 L300 108 L470 222" fill="none" stroke="#c4704f" stroke-width="36" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
