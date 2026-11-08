@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Chaque planning est rangé sous /spaces/{space}, où {space} est une
+    // empreinte de 64 caractères dérivée du code d'accès.
+    // Lister la collection « spaces » est interdit : sans le code, on ne
+    // peut ni trouver ni lire les données.
+    match /spaces/{space} {
+      allow get: if true;
+      allow list: if false;
+      allow create: if space.size() == 64
+                    && request.resource.data.keys().hasOnly(['createdAt', 'v']);
+      allow update: if false;
+      allow delete: if true;
+
+      function spaceExists() {
+        return exists(/databases/$(database)/documents/spaces/$(space));
+      }
+
+      match /members/{memberId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validMember(request.resource.data);
+        allow delete: if true;
+      }
+
+      match /stays/{stayId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validStay(request.resource.data);
+        allow delete: if true;
+      }
+    }
+
+    function validMember(d) {
+      return d.keys().hasOnly(['name', 'color', 'order', 'createdAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 40
+        && d.color is string && d.color.size() <= 20
+        && d.order is number;
+    }
+
+    function isDate(s) {
+      return s is string && s.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function validStay(d) {
+      return d.keys().hasOnly(['memberId', 'start', 'end', 'note', 'createdAt', 'updatedAt'])
+        && d.memberId is string && d.memberId.size() > 0 && d.memberId.size() <= 64
+        && isDate(d.start) && isDate(d.end) && d.start <= d.end
+        && d.note is string && d.note.size() <= 500;
+    }
+  }
+}

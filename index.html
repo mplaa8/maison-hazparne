@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Maison Hazparne</title>
+  <meta name="description" content="Planning partagé de la maison de famille à Hazparne">
+  <meta name="theme-color" content="#f7f3ec" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1b1a18" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Hazparne">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <!-- Écran de chargement -->
+  <div id="screen-loading" class="screen center-screen">
+    <img src="icons/icon-192.png" alt="" class="logo-big">
+    <p class="muted">Chargement…</p>
+  </div>
+
+  <!-- Écran du code d'accès -->
+  <div id="screen-login" class="screen center-screen" hidden>
+    <img src="icons/icon-192.png" alt="" class="logo-big">
+    <h1 class="brand">Maison Hazparne</h1>
+    <p class="muted">Planning de la maison de famille</p>
+    <form id="login-form" class="card login-card" autocomplete="off">
+      <label for="login-code" class="label">Code d'accès</label>
+      <input id="login-code" type="text" inputmode="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Entrez le code" required>
+      <p id="login-error" class="error" hidden></p>
+      <button type="submit" class="btn btn-primary btn-block" id="login-btn">Entrer</button>
+      <p class="small muted">Le code est mémorisé sur ce téléphone. Les majuscules et les tirets n'ont pas d'importance.</p>
+    </form>
+    <div id="create-space" class="card login-card" hidden>
+      <p><strong>Créer un nouvel espace</strong></p>
+      <p class="small muted">À n'utiliser qu'une seule fois, lors de l'installation. Un nouveau planning vide sera créé avec le code saisi ci-dessus.</p>
+      <button type="button" class="btn btn-block" id="create-space-btn">Créer l'espace avec ce code</button>
+    </div>
+  </div>
+
+  <!-- Écran « Je suis… » -->
+  <div id="screen-whoami" class="screen" hidden>
+    <header class="topbar simple">
+      <h1 class="brand small-brand">Qui êtes-vous ?</h1>
+    </header>
+    <main class="content">
+      <p class="muted">Choisissez votre nom. Ce choix est mémorisé sur ce téléphone et pourra être changé dans Réglages.</p>
+      <div id="whoami-list" class="whoami-list"></div>
+      <div id="whoami-empty" class="card" hidden>
+        <p>Aucun membre pour l'instant. Ajoutez d'abord les membres de la famille.</p>
+        <button class="btn btn-primary btn-block" id="whoami-go-family">Ajouter des membres</button>
+      </div>
+      <button class="btn btn-ghost btn-block" id="whoami-skip">Plus tard</button>
+    </main>
+  </div>
+
+  <!-- Application principale -->
+  <div id="screen-app" class="screen" hidden>
+    <header class="topbar">
+      <div class="topbar-row">
+        <div class="brand-wrap">
+          <img src="icons/icon-192.png" alt="" class="logo-small">
+          <span class="brand small-brand">Maison Hazparne</span>
+        </div>
+        <button id="me-chip" class="chip" type="button" aria-label="Changer de profil"></button>
+      </div>
+      <div class="topbar-row year-row" id="year-row">
+        <button class="icon-btn" id="year-prev" aria-label="Année précédente">‹</button>
+        <span id="year-label" class="year-label"></span>
+        <button class="icon-btn" id="year-next" aria-label="Année suivante">›</button>
+        <button class="btn btn-small" id="today-btn">Aujourd'hui</button>
+      </div>
+    </header>
+
+    <main class="content" id="main">
+      <section id="tab-calendar" class="tab">
+        <div id="legend" class="legend"></div>
+        <div id="calendar" class="calendar"></div>
+      </section>
+
+      <section id="tab-stays" class="tab" hidden>
+        <h2 class="section-title">Séjours <span id="stays-year"></span></h2>
+        <div id="stays-list"></div>
+      </section>
+
+      <section id="tab-family" class="tab" hidden>
+        <h2 class="section-title">La famille</h2>
+        <div id="members-list" class="members-list"></div>
+        <form id="member-form" class="card">
+          <label class="label" for="member-name">Ajouter une personne</label>
+          <input id="member-name" type="text" maxlength="40" placeholder="Prénom" autocapitalize="words" required>
+          <div class="label">Couleur</div>
+          <div id="member-colors" class="color-grid"></div>
+          <button class="btn btn-primary btn-block" type="submit">Ajouter</button>
+        </form>
+      </section>
+
+      <section id="tab-settings" class="tab" hidden>
+        <h2 class="section-title">Réglages</h2>
+        <div class="card">
+          <div class="label">Sur ce téléphone, je suis</div>
+          <p id="settings-me" class="big-text"></p>
+          <button class="btn btn-block" id="settings-change-me">Changer</button>
+        </div>
+        <form class="card" id="code-form" autocomplete="off">
+          <div class="label">Changer le code d'accès</div>
+          <p class="small muted">Tout le monde devra saisir le nouveau code. Au moins 8 lettres ou chiffres.</p>
+          <input id="code-new" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Nouveau code" required>
+          <input id="code-new2" type="text" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="Retapez le nouveau code" required>
+          <p id="code-error" class="error" hidden></p>
+          <button class="btn btn-primary btn-block" type="submit">Changer le code</button>
+        </form>
+        <div class="card">
+          <div class="label">Ajouter à l'écran d'accueil</div>
+          <p class="small"><strong>iPhone (Safari)</strong> : touchez le bouton Partager <span aria-hidden="true">⬆︎</span>, puis « Sur l'écran d'accueil ».<br>
+          <strong>Android (Chrome)</strong> : touchez le menu ⋮, puis « Ajouter à l'écran d'accueil » ou « Installer l'application ».</p>
+        </div>
+        <div class="card">
+          <button class="btn btn-danger-ghost btn-block" id="logout-btn">Oublier le code sur ce téléphone</button>
+        </div>
+        <p class="small muted center">Maison Hazparne · Hazparneko etxea</p>
+      </section>
+    </main>
+
+    <div id="select-banner" class="select-banner" hidden>
+      <p id="select-text"></p>
+      <div class="banner-actions">
+        <button class="btn btn-small btn-light" id="select-single">Un seul jour</button>
+        <button class="btn btn-small btn-light-ghost" id="select-cancel">Annuler</button>
+      </div>
+    </div>
+
+    <nav class="tabbar">
+      <button class="tabbtn active" data-tab="calendar"><span class="tabicon">📅</span>Calendrier</button>
+      <button class="tabbtn" data-tab="stays"><span class="tabicon">🧳</span>Séjours</button>
+      <button class="tabbtn" data-tab="family"><span class="tabicon">👪</span>Famille</button>
+      <button class="tabbtn" data-tab="settings"><span class="tabicon">⚙️</span>Réglages</button>
+    </nav>
+  </div>
+
+  <!-- Fenêtre (bottom sheet) générique -->
+  <div id="sheet-overlay" class="overlay" hidden>
+    <div class="sheet" role="dialog" aria-modal="true" id="sheet">
+      <div class="sheet-handle"></div>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+</body>
+</html>
