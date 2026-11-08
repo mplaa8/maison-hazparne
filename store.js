@@ -7,7 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, collection, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, writeBatch, serverTimestamp
+  onSnapshot, writeBatch, serverTimestamp, deleteField
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
@@ -84,11 +84,20 @@ export async function removeMember(id, memberId, stayIds) {
   await batch.commit();
 }
 
-export function addStay(id, { memberId, start, end, note }) {
-  return addDoc(staysCol(id), { memberId, start, end, note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+// Invités : guestIds = profils de la famille, guests = noms d'invités extérieurs.
+// Un séjour sans invités n'a pas ces champs (les anciens séjours comptent comme « seul »).
+export function addStay(id, { memberId, start, end, note, guestIds = [], guests = [] }) {
+  const data = { memberId, start, end, note, createdAt: serverTimestamp(), updatedAt: serverTimestamp() };
+  if (guestIds.length) data.guestIds = guestIds;
+  if (guests.length) data.guests = guests;
+  return addDoc(staysCol(id), data);
 }
-export function updateStay(id, stayId, { memberId, start, end, note }) {
-  return updateDoc(doc(staysCol(id), stayId), { memberId, start, end, note, updatedAt: serverTimestamp() });
+export function updateStay(id, stayId, { memberId, start, end, note, guestIds = [], guests = [] }) {
+  return updateDoc(doc(staysCol(id), stayId), {
+    memberId, start, end, note, updatedAt: serverTimestamp(),
+    guestIds: guestIds.length ? guestIds : deleteField(),
+    guests: guests.length ? guests : deleteField(),
+  });
 }
 export function deleteStay(id, stayId) {
   return deleteDoc(doc(staysCol(id), stayId));

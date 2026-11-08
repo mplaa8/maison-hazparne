@@ -380,3 +380,23 @@ textarea { min-height: 84px; resize: vertical; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes up { from { transform: translateY(60px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { .overlay, .sheet { animation: none; } }
+
+/* ---------- Invités d'un séjour ---------- */
+.solo-row { margin: 0 0 16px; }
+.stay-with { font-weight: 400; color: var(--muted); }
+.check-row .dot { width: 16px; height: 16px; }
+.guest-add { display: flex; gap: 10px; align-items: flex-start; }
+.guest-add input { flex: 1; }
+.guest-add .btn { min-width: 52px; padding: 0; font-size: 26px; font-weight: 500; }
+.guest-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: -2px 0 16px; }
+.guest-chips:empty { display: none; }
+.guest-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 4px 4px 14px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-text); font-weight: 600; font-size: 15px;
+}
+.guest-chip button {
+  width: 32px; height: 32px; border: 0; border-radius: 50%; background: transparent;
+  color: inherit; font-size: 20px; line-height: 1; cursor: pointer;
+}
+.guest-chip button:active { background: rgba(0,0,0,.08); }

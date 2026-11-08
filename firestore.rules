@@ -43,10 +43,12 @@ service cloud.firestore {
     }
 
     function validStay(d) {
-      return d.keys().hasOnly(['memberId', 'start', 'end', 'note', 'createdAt', 'updatedAt'])
+      return d.keys().hasOnly(['memberId', 'start', 'end', 'note', 'guestIds', 'guests', 'createdAt', 'updatedAt'])
         && d.memberId is string && d.memberId.size() > 0 && d.memberId.size() <= 64
         && isDate(d.start) && isDate(d.end) && d.start <= d.end
-        && d.note is string && d.note.size() <= 500;
+        && d.note is string && d.note.size() <= 500
+        && (!('guestIds' in d) || (d.guestIds is list && d.guestIds.size() <= 30))
+        && (!('guests' in d) || (d.guests is list && d.guests.size() <= 30));
     }
   }
 }

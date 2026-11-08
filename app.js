@@ -46,6 +46,23 @@ function rangeText(start, end) {
   return `du ${a} au ${b} · ${n} jours`;
 }
 
+/* ---------- Invités ---------- */
+const guestIdsOf = (s) => (Array.isArray(s.guestIds) ? s.guestIds : []).filter(id => id !== s.memberId && memberById(id));
+const guestsOf = (s) => (Array.isArray(s.guests) ? s.guests : []).filter(n => typeof n === "string" && n.trim());
+function frList(items) {
+  if (items.length <= 1) return items.join("");
+  return items.slice(0, -1).join(", ") + " et " + items[items.length - 1];
+}
+/** « avec Léa, Paul et 1 invité (Jean) » — vide si la personne voyage seule. */
+function withText(s) {
+  const items = guestIdsOf(s).map(id => memberById(id).name);
+  const ext = guestsOf(s);
+  if (ext.length) items.push(`${ext.length} invité${ext.length > 1 ? "s" : ""} (${ext.join(", ")})`);
+  return items.length ? "avec " + frList(items) : "";
+}
+const hostName = (s) => memberById(s.memberId)?.name || "Personne retirée";
+const stayTitle = (s) => { const w = withText(s); return hostName(s) + (w ? " " + w : ""); };
+
 /* ---------- État ---------- */
 const state = {
   spaceId: null,
@@ -301,8 +318,10 @@ function staysByDay(year) {
     while (d <= last && guard++ < 400) {
       if (!map.has(d)) map.set(d, []);
       const arr = map.get(d);
-      if (!arr.some(x => x.memberId === s.memberId)) arr.push({ memberId: s.memberId, stay: s });
-      else arr.push({ memberId: s.memberId, stay: s, dup: true });
+      for (const [mid, asGuest] of [[s.memberId, false], ...guestIdsOf(s).map(g => [g, true])]) {
+        if (!arr.some(x => x.memberId === mid && !x.dup)) arr.push({ memberId: mid, stay: s, asGuest });
+        else arr.push({ memberId: mid, stay: s, asGuest, dup: true });
+      }
       d = addDays(d, 1);
     }
   }
@@ -388,7 +407,7 @@ function renderStays() {
       <button class="stay-item ${s.end < today ? "past" : ""}" data-stay="${esc(s.id)}">
         <span class="stay-color" style="background:${esc(col(mb?.color))}"></span>
         <span class="stay-main">
-          <div class="stay-name">${esc(mb?.name || "Personne retirée")}</div>
+          <div class="stay-name">${esc(mb?.name || "Personne retirée")}${withText(s) ? ` <span class="stay-with">${esc(withText(s))}</span>` : ""}</div>
           <div class="stay-dates">${esc(rangeText(s.start, s.end))}</div>
           ${s.note ? `<div class="stay-note">${esc(s.note)}</div>` : ""}
         </span>
@@ -439,22 +458,33 @@ $("#select-single").onclick = () => {
 };
 
 function openDaySheet(ds, here) {
-  const lines = here.map(x => {
-    const m = memberById(x.memberId);
+  // Une ligne par séjour présent ce jour-là (les invités apparaissent dans la ligne de leur hôte).
+  const stays = [...new Map(here.map(x => [x.stay.id, x.stay])).values()]
+    .sort((p, q) => p.start.localeCompare(q.start));
+  const people = new Set(), extNames = new Set();
+  for (const s of stays) {
+    people.add(memberById(s.memberId) ? s.memberId : "stay:" + s.id);
+    guestIdsOf(s).forEach(id => people.add(id));
+    guestsOf(s).forEach(n => extNames.add(n.trim().toLowerCase()));
+  }
+  const total = people.size + extNames.size;
+  const lines = stays.map(s => {
+    const m = memberById(s.memberId);
+    const w = withText(s);
     return `
       <div class="person-line">
         <span class="dot" style="background:${esc(col(m?.color))};width:24px;height:24px"></span>
         <div class="info">
-          <strong>${esc(m?.name || "Personne retirée")}</strong>
-          <div class="small">${esc(rangeText(x.stay.start, x.stay.end))}</div>
-          ${x.stay.note ? `<div class="small muted">${esc(x.stay.note)}</div>` : ""}
+          <strong>${esc(hostName(s))}</strong>${w ? ` <span class="small">${esc(w)}</span>` : ""}
+          <div class="small">${esc(rangeText(s.start, s.end))}</div>
+          ${s.note ? `<div class="small muted">${esc(s.note)}</div>` : ""}
         </div>
-        <button class="btn btn-small" data-edit="${esc(x.stay.id)}">Modifier</button>
+        <button class="btn btn-small" data-edit="${esc(s.id)}">Modifier</button>
       </div>`;
   }).join("");
   openSheet(`
     <h3>${esc(longDate(ds))}</h3>
-    <p class="label">À la maison</p>
+    <p class="label">À la maison · ${total} personne${total > 1 ? "s" : ""}</p>
     ${lines}
     <div style="height:14px"></div>
     <button class="btn btn-primary btn-block" id="day-add">Ajouter un séjour à partir de ce jour</button>
@@ -488,6 +518,21 @@ function openStayEditor(stay) {
         <input type="date" id="st-end" value="${stay.end}">
       </div>
       <div class="summary-box" id="st-summary"></div>
+      <div class="label">Voyagez-vous seul ?</div>
+      <div class="btn-row solo-row">
+        <button type="button" class="btn" id="st-solo-yes" aria-pressed="false">Oui</button>
+        <button type="button" class="btn" id="st-solo-no" aria-pressed="false">Non</button>
+      </div>
+      <div id="st-guests" hidden>
+        <div class="label">Avec qui ?</div>
+        <div id="st-guest-members"></div>
+        <label class="label" for="st-guest-name">Ajouter un invité</label>
+        <div class="guest-add">
+          <input id="st-guest-name" type="text" maxlength="40" placeholder="Nom de l'invité" autocapitalize="words" enterkeyhint="done">
+          <button type="button" class="btn btn-primary" id="st-guest-add" aria-label="Ajouter l'invité">+</button>
+        </div>
+        <div id="st-guest-chips" class="guest-chips"></div>
+      </div>
       <label class="label" for="st-note">Note (facultatif)</label>
       <textarea id="st-note" maxlength="500" placeholder="Ex. : avec les enfants, arrivée le soir…">${esc(stay.note || "")}</textarea>
       <p class="error" id="st-error" hidden></p>
@@ -512,8 +557,48 @@ function openStayEditor(stay) {
   };
   startI.onchange = () => { if (endI.value && endI.value < startI.value) endI.value = startI.value; summary(); };
   endI.onchange = summary;
-  $("#st-member").onchange = summary;
+  // Invités
+  const guestIds = new Set(Array.isArray(stay.guestIds) ? stay.guestIds.filter(id => memberById(id)) : []);
+  const guests = Array.isArray(stay.guests) ? stay.guests.filter(n => typeof n === "string" && n.trim()) : [];
+  let solo = !(guestIds.size || guests.length);
+  const renderGuests = () => {
+    const host = $("#st-member").value;
+    guestIds.delete(host);
+    $("#st-solo-yes").className = "btn" + (solo ? " btn-primary" : "");
+    $("#st-solo-no").className = "btn" + (solo ? "" : " btn-primary");
+    $("#st-solo-yes").setAttribute("aria-pressed", solo);
+    $("#st-solo-no").setAttribute("aria-pressed", !solo);
+    $("#st-guests").hidden = solo;
+    const others = state.members.filter(m => m.id !== host);
+    $("#st-guest-members").innerHTML = others.length
+      ? others.map(m => `<label class="check-row"><input type="checkbox" data-guest="${esc(m.id)}" ${guestIds.has(m.id) ? "checked" : ""}><span class="dot" style="background:${esc(col(m.color))}"></span>${esc(m.name)}</label>`).join("")
+      : `<p class="small muted">Aucun autre profil dans la famille.</p>`;
+    $("#st-guest-chips").innerHTML = guests.map((n, i) =>
+      `<span class="guest-chip">${esc(n)}<button type="button" data-unguest="${i}" aria-label="Retirer ${esc(n)}">×</button></span>`).join("");
+  };
+  const addExternal = () => {
+    const n = $("#st-guest-name").value.trim().slice(0, 40);
+    if (!n) return;
+    if (guests.length >= 30) { toast("30 invités au maximum."); return; }
+    if (!guests.some(g => g.toLowerCase() === n.toLowerCase())) guests.push(n);
+    $("#st-guest-name").value = "";
+    renderGuests();
+  };
+  $("#st-solo-yes").onclick = () => { solo = true; renderGuests(); };
+  $("#st-solo-no").onclick = () => { solo = false; renderGuests(); };
+  $("#st-guest-members").onchange = (ev) => {
+    const c = ev.target.closest("[data-guest]"); if (!c) return;
+    c.checked ? guestIds.add(c.dataset.guest) : guestIds.delete(c.dataset.guest);
+  };
+  $("#st-guest-add").onclick = addExternal;
+  $("#st-guest-name").onkeydown = (ev) => { if (ev.key === "Enter") { ev.preventDefault(); addExternal(); } };
+  $("#st-guest-chips").onclick = (ev) => {
+    const b = ev.target.closest("[data-unguest]"); if (!b) return;
+    guests.splice(Number(b.dataset.unguest), 1); renderGuests();
+  };
+  $("#st-member").onchange = () => { summary(); renderGuests(); };
   summary();
+  renderGuests();
 
   $("#st-cancel").onclick = () => closeSheet();
   $("#stay-form").onsubmit = async (e) => {
@@ -523,7 +608,14 @@ function openStayEditor(stay) {
       start: startI.value,
       end: singleI.checked ? startI.value : endI.value,
       note: $("#st-note").value.trim().slice(0, 500),
+      guestIds: [],
+      guests: [],
     };
+    if (!solo) {
+      if ($("#st-guest-name").value.trim()) addExternal(); // nom tapé mais pas encore validé par « + »
+      data.guestIds = [...guestIds].filter(id => id !== data.memberId && memberById(id));
+      data.guests = guests.slice(0, 30);
+    }
     const err = $("#st-error");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(data.start) || !/^\d{4}-\d{2}-\d{2}$/.test(data.end)) { err.textContent = "Dates incomplètes."; err.hidden = false; return; }
     if (data.end < data.start) { err.textContent = "Le départ doit être après l'arrivée."; err.hidden = false; return; }
