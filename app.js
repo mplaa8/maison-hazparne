@@ -1,4 +1,5 @@
 import * as store from "./store.js";
+import { initAgenda, renderAgenda, setAgendaDates } from "./agenda.js";
 
 /* ---------- Constantes & utilitaires ---------- */
 // Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
@@ -249,17 +250,19 @@ $("#whoami-go-family").onclick = () => { showApp(); setTab("family"); };
 function showApp() {
   const wasHidden = $("#screen-app").hidden;
   show("app");
+  if (state.pendingTab) { const t = state.pendingTab; state.pendingTab = null; setTab(t); return; }
   if (wasHidden && state.tab === "calendar") requestAnimationFrame(() => scrollToMonth());
 }
 
 function setTab(tab) {
   state.tab = tab;
   document.querySelectorAll(".tabbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const t of ["calendar", "stays", "family", "settings"]) $("#tab-" + t).hidden = t !== tab;
+  for (const t of ["calendar", "stays", "agenda", "family", "settings"]) $("#tab-" + t).hidden = t !== tab;
   $("#year-row").hidden = !(tab === "calendar" || tab === "stays");
   if (tab !== "calendar") cancelSelection();
   window.scrollTo(0, 0);
   if (tab === "calendar") requestAnimationFrame(() => scrollToMonth());
+  if (tab === "agenda") renderAgenda();
 }
 document.querySelectorAll(".tabbtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -303,6 +306,7 @@ function renderAll() {
   renderCalendar();
   renderStays();
   renderMembers();
+  if (state.tab === "agenda") renderAgenda();
   if (!$("#screen-whoami").hidden) renderWhoami();
 }
 
@@ -763,6 +767,14 @@ $("#logout-btn").onclick = async () => {
 $("#login-code").addEventListener("focus", () => {
   setTimeout(() => $("#login-form").scrollIntoView({ behavior: "smooth", block: "end" }), 350);
 });
+
+/* ---------- Agenda ---------- */
+initAgenda({ state, memberById, me, todayStr, withText });
+// Lien direct possible : …/#agenda=2027-07-12_2027-07-20
+{
+  const m = location.hash.match(/^#agenda=(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);
+  if (m) { setAgendaDates(m[1], m[2]); state.pendingTab = "agenda"; }
+}
 
 /* ---------- Démarrage ---------- */
 if ("serviceWorker" in navigator) {

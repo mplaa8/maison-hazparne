@@ -1,7 +1,7 @@
 // Service worker : permet l'ouverture hors connexion et l'installation.
 // Stratégie « réseau d'abord » pour toujours avoir la dernière version.
-const CACHE = "maison-hazparne-v5";
-const SHELL = ["./", "index.html", "style.css", "app.js", "store.js", "config.js", "manifest.webmanifest",
+const CACHE = "maison-hazparne-v6";
+const SHELL = ["./", "index.html", "style.css", "app.js", "store.js", "agenda.js", "config.js", "manifest.webmanifest",
   "icons/icon-192.png", "icons/apple-touch-icon.png", "icons/icon.svg", "images/maison.webp", "images/maison.jpg"];
 
 self.addEventListener("install", (e) => {

@@ -21,3 +21,14 @@ Changer le code déplace les données vers la nouvelle empreinte et efface l'anc
 - `manifest.webmanifest`, `sw.js`, `icons/` : installation sur l'écran d'accueil
 
 Première installation : ouvrir l'app avec `#creer` à la fin de l'adresse pour créer l'espace avec le code choisi.
+
+## Agenda
+
+L'onglet « Agenda » affiche les événements qui chevauchent un séjour.
+
+- `data/reference.json` : liste de référence des grands événements récurrents (nom, ville, dates, description,
+  coordonnées, lien officiel, notoriété de 1 à 5). `confirmed: false` = dates estimées d'après la règle habituelle.
+- `data/images.json` + `images/agenda/` : photos libres de droits (Wikimedia Commons), avec auteur et licence.
+- `scripts/build-events.mjs` : fusionne la liste de référence avec l'agenda culturel ouvert du Gouvernement basque
+  (Kulturklik, `api.euskadi.eus`, sans clé) et écrit `data/events.json` et `data/live/AAAA-MM.json`.
+- `.github/workflows/agenda.yml` : relance ce script chaque nuit (GitHub Actions, gratuit).

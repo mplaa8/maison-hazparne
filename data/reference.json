@@ -1,0 +1,665 @@
+{
+  "_comment": "Liste de référence des grands événements récurrents. Dates vérifiées le 2026-11-08. confirmed=true : dates annoncées par l'organisateur ; false : dates estimées d'après la règle habituelle, à confirmer. note = notoriété de 1 à 5.",
+  "home": {
+    "name": "Hasparren",
+    "lat": 43.3843,
+    "lon": -1.3053
+  },
+  "tourismOffice": {
+    "name": "Office de Tourisme Pays Basque",
+    "url": "https://www.en-pays-basque.fr"
+  },
+  "events": [
+    {
+      "id": "fetes-bayonne",
+      "name": "Fêtes de Bayonne",
+      "city": "Bayonne",
+      "lat": 43.4929,
+      "lon": -1.4748,
+      "note": 5,
+      "url": "https://www.fetes.bayonne.fr",
+      "description": "Cinq jours de fête en blanc et rouge : bandas, chants basques, corsos, concerts et la célèbre ouverture depuis le balcon de la mairie.",
+      "dates": [
+        {
+          "start": "2027-07-14",
+          "end": "2027-07-18",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "san-fermin",
+      "name": "San Fermín",
+      "city": "Pampelune – Iruñea",
+      "lat": 42.8125,
+      "lon": -1.6458,
+      "note": 5,
+      "url": "https://www.pamplona.es",
+      "description": "Les fêtes de Pampelune, du chupinazo du 6 juillet au Pobre de mí du 14 : encierros, géants et grosses têtes, fanfares jour et nuit.",
+      "dates": [
+        {
+          "start": "2027-07-06",
+          "end": "2027-07-14",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "14-juillet",
+      "name": "Feux d'artifice du 14 juillet sur la côte",
+      "city": "Saint-Jean-de-Luz",
+      "lat": 43.3881,
+      "lon": -1.6634,
+      "note": 3,
+      "url": "https://www.saintjeandeluz.fr/fr/feu-dartifice-du-14-juillet/",
+      "description": "Le soir de la fête nationale, feu tiré au-dessus de la baie de Saint-Jean-de-Luz et du fort de Socoa ; Anglet, Bayonne, Biarritz et Hendaye tirent aussi le leur.",
+      "dates": [
+        {
+          "start": "2027-07-14",
+          "end": "2027-07-14",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "jazz-vitoria",
+      "name": "Festival de jazz de Vitoria-Gasteiz (50ᵉ édition)",
+      "city": "Vitoria-Gasteiz",
+      "lat": 42.8467,
+      "lon": -2.6726,
+      "note": 3,
+      "url": "https://www.jazzvitoria.com",
+      "description": "Grand festival de jazz de la mi-juillet, qui fête ses 50 ans en 2027 : concerts au Mendizorrotza et nombreux concerts en ville.",
+      "dates": [
+        {
+          "start": "2027-07-13",
+          "end": "2027-07-18",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "semana-grande",
+      "name": "Semaine Grande de Donostia (Aste Nagusia)",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 5,
+      "url": "https://www.donostiakultura.eus/es/fiestas/tablon",
+      "description": "Une semaine de fête autour du 15 août, avec chaque soir le concours international de feux d'artifice au-dessus de la baie de La Concha.",
+      "dates": [
+        {
+          "start": "2027-08-14",
+          "end": "2027-08-21",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "aste-nagusia",
+      "name": "Aste Nagusia de Bilbao",
+      "city": "Bilbao",
+      "lat": 43.263,
+      "lon": -2.935,
+      "note": 5,
+      "url": "https://www.bilbao.eus",
+      "description": "Neuf jours de fête populaire autour de Marijaia : concerts gratuits, txosnas, feux d'artifice et force basque sur les rives du Nervión.",
+      "dates": [
+        {
+          "start": "2027-08-21",
+          "end": "2027-08-29",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "jazzaldia",
+      "name": "Jazzaldia – Festival de jazz",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 4,
+      "url": "https://www.jazzaldia.eus",
+      "description": "L'un des plus anciens festivals de jazz d'Europe : grandes têtes d'affiche au Kursaal et nombreux concerts gratuits en plein air.",
+      "dates": [
+        {
+          "start": "2027-07-21",
+          "end": "2027-07-25",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "bbk-live",
+      "name": "Bilbao BBK Live",
+      "city": "Bilbao",
+      "lat": 43.263,
+      "lon": -2.935,
+      "note": 4,
+      "url": "https://www.bilbaobbklive.com",
+      "description": "Grand festival de musiques actuelles sur la colline de Kobetamendi, avec vue sur Bilbao.",
+      "dates": [
+        {
+          "start": "2027-07-08",
+          "end": "2027-07-10",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "zinemaldia",
+      "name": "Festival international du film (Zinemaldia)",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 5,
+      "url": "https://www.sansebastianfestival.com",
+      "description": "Le grand festival de cinéma d'Espagne : projections au Kursaal et au Victoria Eugenia, tapis rouge et stars internationales.",
+      "dates": [
+        {
+          "start": "2027-09-17",
+          "end": "2027-09-25",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "regatas",
+      "name": "Régates de traînières – Bandera de La Concha",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 4,
+      "url": "https://sansebastianturismoa.eus",
+      "description": "Les deux dimanches de régates les plus suivis du Pays basque : les traînières s'affrontent dans la baie devant des milliers de spectateurs.",
+      "dates": [
+        {
+          "start": "2027-09-05",
+          "end": "2027-09-05",
+          "confirmed": false
+        },
+        {
+          "start": "2027-09-12",
+          "end": "2027-09-12",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "tamborrada",
+      "name": "Tamborrada de la Saint-Sébastien",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 5,
+      "url": "https://sansebastianturismoa.eus",
+      "description": "Pendant 24 heures, de minuit à minuit, des milliers de tambours en costume défilent dans toute la ville pour la fête de son saint patron.",
+      "dates": [
+        {
+          "start": "2027-01-20",
+          "end": "2027-01-20",
+          "confirmed": true
+        },
+        {
+          "start": "2028-01-20",
+          "end": "2028-01-20",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "santo-tomas",
+      "name": "Foire de la Saint-Thomas",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 3,
+      "url": "https://sansebastianturismoa.eus",
+      "description": "Grand marché paysan d'avant Noël : produits fermiers, txistorra, cidre et le traditionnel cochon exposé sur la place de la Constitution.",
+      "dates": [
+        {
+          "start": "2026-12-21",
+          "end": "2026-12-21",
+          "confirmed": true
+        },
+        {
+          "start": "2027-12-21",
+          "end": "2027-12-21",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "olentzero",
+      "name": "Défilés d'Olentzero",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 3,
+      "url": "https://sansebastianturismoa.eus",
+      "description": "Le soir du 24 décembre, le charbonnier Olentzero descend de la montagne et parcourt les rues en chansons dans tout le Pays basque.",
+      "dates": [
+        {
+          "start": "2026-12-24",
+          "end": "2026-12-24",
+          "confirmed": true
+        },
+        {
+          "start": "2027-12-24",
+          "end": "2027-12-24",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "jambon",
+      "name": "Foire au jambon de Bayonne",
+      "city": "Bayonne",
+      "lat": 43.4929,
+      "lon": -1.4748,
+      "note": 4,
+      "url": "https://www.bayonne.fr",
+      "description": "La plus ancienne foire de Bayonne : producteurs de jambon, dégustations, concours et animations sur les quais de l'Adour.",
+      "dates": [
+        {
+          "start": "2027-04-01",
+          "end": "2027-04-04",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "piment",
+      "name": "Fête du piment d'Espelette",
+      "city": "Espelette",
+      "lat": 43.3401,
+      "lon": -1.4475,
+      "note": 4,
+      "url": "https://www.saint-jean-de-luz.com/sit/fete-du-piment-despelette-2/",
+      "description": "Le village célèbre la récolte du piment : marché, messe et procession, intronisations de la confrérie et façades couvertes de piments.",
+      "dates": [
+        {
+          "start": "2027-10-23",
+          "end": "2027-10-24",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "fetes-espelette",
+      "name": "Fêtes d'Espelette",
+      "city": "Espelette",
+      "lat": 43.3401,
+      "lon": -1.4475,
+      "note": 2,
+      "url": "https://www.en-pays-basque.fr",
+      "description": "Les fêtes du village en été : force basque, pelote, bals et repas dans les rues d'Espelette.",
+      "dates": [
+        {
+          "start": "2027-08-01",
+          "end": "2027-08-01",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "saint-jean-sjdl",
+      "name": "Fêtes de la Saint-Jean",
+      "city": "Saint-Jean-de-Luz",
+      "lat": 43.3881,
+      "lon": -1.6634,
+      "note": 3,
+      "url": "https://www.saint-jean-de-luz.com",
+      "description": "Les fêtes patronales de Saint-Jean-de-Luz : feu de la Saint-Jean, toro de fuego, danses et musique basques autour du port.",
+      "dates": [
+        {
+          "start": "2027-06-24",
+          "end": "2027-06-27",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "fete-thon",
+      "name": "Fête du thon",
+      "city": "Saint-Jean-de-Luz",
+      "lat": 43.3881,
+      "lon": -1.6634,
+      "note": 3,
+      "url": "https://www.saint-jean-de-luz.com/agenda/les-grands-evenements/fete-du-thon/",
+      "description": "Grande fête du port : dégustation de thon grillé, bandas, chants et bal sur le port de Saint-Jean-de-Luz et Ciboure.",
+      "dates": [
+        {
+          "start": "2027-07-24",
+          "end": "2027-07-24",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "hotdogger",
+      "name": "Hotdogger Surf Festival",
+      "city": "Biarritz",
+      "lat": 43.4832,
+      "lon": -1.5586,
+      "note": 2,
+      "url": "https://www.destination-biarritz.fr/en/temps-fort/hotdogger-surf-festival/",
+      "description": "Festival de surf rétro sur la Côte des Basques : longboards, planches anciennes, musique et ambiance des années 60.",
+      "dates": [
+        {
+          "start": "2027-05-21",
+          "end": "2027-05-23",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "fipadoc",
+      "name": "FIPADOC – Festival du documentaire",
+      "city": "Biarritz",
+      "lat": 43.4832,
+      "lon": -1.5586,
+      "note": 3,
+      "url": "https://www.fipadoc.com",
+      "description": "Festival international du film documentaire : projections, rencontres avec les réalisateurs et séances ouvertes au public.",
+      "dates": [
+        {
+          "start": "2027-01-22",
+          "end": "2027-01-30",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "biarritz-film",
+      "name": "Biarritz Film Festival – Nouvelles Vagues",
+      "city": "Biarritz",
+      "lat": 43.4832,
+      "lon": -1.5586,
+      "note": 2,
+      "url": "https://www.destination-biarritz.fr/en/agenda/temps-forts/",
+      "description": "Festival de cinéma consacré aux nouveaux talents, avec projections et rencontres dans les salles de Biarritz.",
+      "dates": [
+        {
+          "start": "2027-06-22",
+          "end": "2027-06-27",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "biarritz-15-aout",
+      "name": "Feu d'artifice du 15 août",
+      "city": "Biarritz",
+      "lat": 43.4832,
+      "lon": -1.5586,
+      "note": 3,
+      "url": "https://www.destination-biarritz.fr/en/agenda/temps-forts/",
+      "description": "Le grand feu d'artifice gratuit tiré au-dessus de la Grande Plage pour la fête du 15 août.",
+      "dates": [
+        {
+          "start": "2027-08-15",
+          "end": "2027-08-15",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "temps-aimer",
+      "name": "Le Temps d'Aimer la Danse",
+      "city": "Biarritz",
+      "lat": 43.4832,
+      "lon": -1.5586,
+      "note": 3,
+      "url": "https://www.letempsdaimer.com",
+      "description": "Grand festival de danse de septembre : spectacles en salle, danse en plein air et rendez-vous gratuits sur le front de mer.",
+      "dates": [
+        {
+          "start": "2027-09-10",
+          "end": "2027-09-19",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "lehengo-hazparne",
+      "name": "Lehengo Hazparne – Hasparren d'autrefois",
+      "city": "Hasparren",
+      "lat": 43.3843,
+      "lon": -1.3053,
+      "note": 3,
+      "url": "https://www.en-pays-basque.fr/territoires-et-destinations/baigura-et-la-vallee-de-l-arberoue/hasparren/",
+      "description": "Tous les deux ans, le bourg revit comme au début du XXᵉ siècle : métiers anciens, costumes d'époque, attelages et repas en plein air.",
+      "dates": [
+        {
+          "start": "2027-08-08",
+          "end": "2027-08-08",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "fetes-hasparren",
+      "name": "Fêtes patronales d'Hasparren",
+      "city": "Hasparren",
+      "lat": 43.3843,
+      "lon": -1.3053,
+      "note": 2,
+      "url": "https://www.en-pays-basque.fr/territoires-et-destinations/baigura-et-la-vallee-de-l-arberoue/hasparren/",
+      "description": "Les fêtes du village autour de la Saint-Jean : tamborrada, bandas, pelote et repas dans le centre-ville.",
+      "dates": [
+        {
+          "start": "2027-06-18",
+          "end": "2027-06-21",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "force-basque",
+      "name": "Festival de force basque",
+      "city": "Saint-Palais",
+      "lat": 43.329,
+      "lon": -1.033,
+      "note": 3,
+      "url": "https://www.en-pays-basque.fr",
+      "description": "Le grand rendez-vous des jeux de force basque : lever de pierre, tir à la corde, scieurs de bois et porteurs de sacs.",
+      "dates": [
+        {
+          "start": "2027-08-22",
+          "end": "2027-08-22",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "itxassou",
+      "name": "Fête de la cerise",
+      "city": "Itxassou",
+      "lat": 43.3297,
+      "lon": -1.4044,
+      "note": 2,
+      "url": "https://www.en-pays-basque.fr",
+      "description": "Début juin, Itxassou fête ses cerises noires : marché, confitures, animations et danses basques.",
+      "dates": [
+        {
+          "start": "2027-06-06",
+          "end": "2027-06-06",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "fetes-sjpp",
+      "name": "Fêtes de Saint-Jean-Pied-de-Port",
+      "city": "Saint-Jean-Pied-de-Port",
+      "lat": 43.1633,
+      "lon": -1.237,
+      "note": 2,
+      "url": "https://www.en-pays-basque.fr",
+      "description": "Les fêtes de la cité fortifiée autour du 15 août : pelote, force basque, bals et concerts dans les remparts.",
+      "dates": [
+        {
+          "start": "2027-08-13",
+          "end": "2027-08-16",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "herri-urrats",
+      "name": "Herri Urrats",
+      "city": "Saint-Pée-sur-Nivelle",
+      "lat": 43.3554,
+      "lon": -1.552,
+      "note": 3,
+      "url": "https://www.en-pays-basque.fr",
+      "description": "Grande fête autour du lac de Saint-Pée en soutien aux écoles en langue basque : concerts, danses et repas.",
+      "dates": [
+        {
+          "start": "2027-05-09",
+          "end": "2027-05-09",
+          "confirmed": false
+        },
+        {
+          "start": "2028-05-14",
+          "end": "2028-05-14",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "virgen-blanca",
+      "name": "Fêtes de la Virgen Blanca",
+      "city": "Vitoria-Gasteiz",
+      "lat": 42.8467,
+      "lon": -2.6726,
+      "note": 4,
+      "url": "https://www.vitoria-gasteiz.org",
+      "description": "La descente de Celedón ouvre six jours de fête dans la capitale basque : défilés, concerts et blusas dans les rues.",
+      "dates": [
+        {
+          "start": "2027-08-04",
+          "end": "2027-08-09",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "olite",
+      "name": "Fêtes médiévales d'Olite",
+      "city": "Olite – Erriberri",
+      "lat": 42.4818,
+      "lon": -1.6501,
+      "note": 3,
+      "url": "https://www.turismo.navarra.es",
+      "description": "Marché, tournois, musique et costumes d'époque au pied du palais royal de Navarre.",
+      "dates": [
+        {
+          "start": "2027-08-13",
+          "end": "2027-08-15",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "tolosa",
+      "name": "Carnaval de Tolosa (Inauteriak)",
+      "city": "Tolosa",
+      "lat": 43.134,
+      "lon": -2.078,
+      "note": 4,
+      "url": "https://www.tolosa.eus",
+      "description": "L'un des carnavals les plus festifs d'Euskadi : six jours de déguisements, de défilés et de musique.",
+      "dates": [
+        {
+          "start": "2027-02-04",
+          "end": "2027-02-09",
+          "confirmed": false
+        },
+        {
+          "start": "2028-02-24",
+          "end": "2028-02-29",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "lantz",
+      "name": "Carnaval de Lantz",
+      "city": "Lantz",
+      "lat": 42.999,
+      "lon": -1.623,
+      "note": 3,
+      "url": "https://www.turismo.navarra.es",
+      "description": "Carnaval rural très ancien : le bandit Miel Otxin est promené dans le village par des personnages en costume, puis brûlé.",
+      "dates": [
+        {
+          "start": "2027-02-07",
+          "end": "2027-02-09",
+          "confirmed": false
+        },
+        {
+          "start": "2028-02-27",
+          "end": "2028-02-29",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "madeleine",
+      "name": "Fêtes de la Madeleine",
+      "city": "Mont-de-Marsan",
+      "lat": 43.8902,
+      "lon": -0.4994,
+      "note": 3,
+      "url": "https://www.montdemarsan.fr/sortir-bouger/fetes-de-la-madeleine/",
+      "description": "Cinq jours de fête landaise : bodegas, bandas, courses landaises et concerts dans tout le centre-ville.",
+      "dates": [
+        {
+          "start": "2027-07-21",
+          "end": "2027-07-25",
+          "confirmed": true
+        }
+      ]
+    },
+    {
+      "id": "dax",
+      "name": "Feria de Dax",
+      "city": "Dax",
+      "lat": 43.7102,
+      "lon": -1.0536,
+      "note": 4,
+      "url": "https://www.dax.fr",
+      "description": "La grande feria de la mi-août : bandas, défilés, courses landaises et fête dans les rues de la ville thermale.",
+      "dates": [
+        {
+          "start": "2027-08-11",
+          "end": "2027-08-15",
+          "confirmed": false
+        }
+      ]
+    },
+    {
+      "id": "behobia",
+      "name": "Course Behobia – Saint-Sébastien",
+      "city": "Donostia – Saint-Sébastien",
+      "lat": 43.3183,
+      "lon": -1.9812,
+      "note": 3,
+      "url": "https://www.behobia-sansebastian.com",
+      "description": "Course populaire de 20 km entre Behobia et Saint-Sébastien, suivie par des dizaines de milliers de spectateurs.",
+      "dates": [
+        {
+          "start": "2027-11-14",
+          "end": "2027-11-14",
+          "confirmed": false
+        }
+      ]
+    }
+  ],
+  "webcams": {
+    "Biarritz": "https://www.destination-biarritz.fr/en/pratique/webcams-biarritz/",
+    "Saint-Jean-de-Luz": "https://www.en-pays-basque.fr/en/webcam/"
+  }
+}

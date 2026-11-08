@@ -100,6 +100,23 @@
         <div id="stays-list"></div>
       </section>
 
+      <section id="tab-agenda" class="tab" hidden>
+        <h2 class="section-title">Agenda</h2>
+        <p class="muted agenda-intro">Fêtes, festivals et sorties autour de la maison pendant un séjour.</p>
+        <label class="label" for="ag-stay">Séjour</label>
+        <select id="ag-stay"></select>
+        <div id="ag-dates" class="ag-dates" hidden>
+          <div><label class="label" for="ag-from">Du</label><input type="date" id="ag-from"></div>
+          <div><label class="label" for="ag-to">Au</label><input type="date" id="ag-to"></div>
+        </div>
+        <div class="segmented" id="ag-sort" role="group" aria-label="Trier les événements">
+          <button type="button" class="active" data-sort="famous" aria-pressed="true">Les plus connus</button>
+          <button type="button" data-sort="near" aria-pressed="false">Les plus proches</button>
+        </div>
+        <p id="ag-summary" class="small muted ag-summary"></p>
+        <div id="ag-list"></div>
+      </section>
+
       <section id="tab-family" class="tab" hidden>
         <h2 class="section-title">La famille</h2>
         <div id="members-list" class="members-list"></div>
@@ -148,8 +165,9 @@
     </div>
 
     <nav class="tabbar">
-      <button class="tabbtn active" data-tab="calendar"><span class="tabicon"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span>Calendrier</button>
+      <button class="tabbtn active" data-tab="calendar"><span class="tabicon"><svg viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg></span>Planning</button>
       <button class="tabbtn" data-tab="stays"><span class="tabicon"><svg viewBox="0 0 24 24"><rect x="4" y="7.5" width="16" height="12.5" rx="3"/><path d="M9 7.5V5.5a1.5 1.5 0 0 1 1.5-1.5h3A1.5 1.5 0 0 1 15 5.5v2M4 13h16"/></svg></span>Séjours</button>
+      <button class="tabbtn" data-tab="agenda"><span class="tabicon"><svg viewBox="0 0 24 24"><path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/></svg></span>Agenda</button>
       <button class="tabbtn" data-tab="family"><span class="tabicon"><svg viewBox="0 0 24 24"><circle cx="9" cy="8.5" r="3.2"/><path d="M3 19.5c.6-3.3 3-5 6-5s5.4 1.7 6 5"/><circle cx="17" cy="9.5" r="2.5"/><path d="M16.5 14.6c2.3.2 4 1.6 4.5 4.4"/></svg></span>Famille</button>
       <button class="tabbtn" data-tab="settings"><span class="tabicon"><svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2.2"/><circle cx="10" cy="17" r="2.2"/></svg></span>Réglages</button>
     </nav>
