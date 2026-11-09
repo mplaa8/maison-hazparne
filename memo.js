@@ -247,8 +247,12 @@ async function onClick(e) {
     case "item-add": {
       const items = itemsOf(ui.list);
       const order = items.reduce((m, i) => Math.max(m, i.order ?? 0), 0) + 1;
-      return textSheet(`Ajouter un point – ${LIST_NAMES[ui.list]}`, "Texte", "", "Ajouter", 200,
-        (v) => store.addItem(sid, { list: ui.list, text: v, order }).catch(fail));
+      // Une ligne = un point : on peut coller une liste entière d'un coup.
+      return textSheet(`Ajouter un point – ${LIST_NAMES[ui.list]}`, "Texte (un point par ligne)", "", "Ajouter", 5000, (v) => {
+        const lines = v.split(/\r?\n/).map(l => l.replace(/^\s*(?:[-–—•*]|\d+[.)])\s*/, "").trim().slice(0, 200)).filter(Boolean).slice(0, 50);
+        Promise.all(lines.map((text, n) => store.addItem(sid, { list: ui.list, text, order: order + n })))
+          .then(() => { if (lines.length > 1) ctx.toast(`${lines.length} points ajoutés`); }).catch(fail);
+      });
     }
     case "item-edit": {
       const it = memo.items.find(x => x.id === id); if (!it) return;
