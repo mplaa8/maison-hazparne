@@ -58,7 +58,7 @@ function checkKey(list) {
 }
 const infosSorted = () => memo.infos.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt?.seconds ?? 9e9) - (b.createdAt?.seconds ?? 9e9));
 
-/** Numéro affiché : « 05 59 70 26 43 » pour un numéro français à 10 chiffres, sinon tel quel. */
+/** Numéro affiché : « 05 12 34 56 78 » pour un numéro français à 10 chiffres, sinon tel quel. */
 function fmtPhone(p) {
   const d = String(p).replace(/[^\d+]/g, "");
   return /^0\d{9}$/.test(d) ? d.replace(/(\d{2})(?=\d)/g, "$1 ") : String(p).trim();
