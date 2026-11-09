@@ -538,6 +538,27 @@ textarea { min-height: 84px; resize: vertical; }
 .note-meta { margin: 4px 0 0; font-size: 13px; color: var(--muted); }
 .note-actions { display: flex; flex-wrap: wrap; gap: 0 14px; margin-left: -4px; }
 
+.info-card {
+  padding: 14px 16px; margin-bottom: 10px;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);
+}
+.info-head { display: flex; align-items: flex-start; gap: 8px; }
+.info-main { flex: 1; min-width: 0; }
+.info-head > .info-text { flex: 1; min-width: 0; }
+.info-text { margin: 0; white-space: pre-wrap; word-break: break-word; }
+.info-main .info-text { margin-top: 2px; font-size: 15px; }
+.info-name { margin: 0; font-weight: 700; font-size: 17px; }
+.info-tools { display: flex; gap: 0; flex: none; margin: -10px -8px -10px 0; }
+.phone-row { display: flex; gap: 8px; margin-top: 10px; }
+.phone-call {
+  flex: 1; min-width: 0; justify-content: flex-start; gap: 10px; text-decoration: none;
+  background: var(--accent-soft); border-color: transparent; color: var(--accent-text);
+  font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.phone-call svg { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.phone-copy { flex: none; padding-left: 16px; padding-right: 16px; }
+.info-kind { margin-bottom: 16px; }
+
 .check-context { margin: 0 2px 6px; }
 .check-info { margin: 0 2px 10px; font-size: 14px; color: var(--muted); background: var(--surface-2); border-radius: var(--radius-sm); padding: 10px 12px; }
 .progress-row { display: flex; align-items: center; gap: 12px; margin: 6px 2px 10px; }

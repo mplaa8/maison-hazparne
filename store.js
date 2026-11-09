@@ -128,17 +128,19 @@ export async function moveSpace(oldId, newId) {
 
 /* ---------- Mémo : code wifi, points d'attention, check-lists ---------- */
 // Tout est rangé sous /spaces/{id}, comme le planning : rien n'est dans le code source ni dans le dépôt.
-const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo"];
+const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo", "infos"];
 const col = (id, name) => collection(getDb(), "spaces", id, name);
 
 /** Écoute en temps réel du Mémo. onError reçoit l'erreur (ex. règles Firestore pas encore mises à jour). */
-export function subscribeMemo(id, { onWifi, onNotes, onItems, onChecks, onError }) {
+export function subscribeMemo(id, { onWifi, onNotes, onItems, onChecks, onInfos, onInfosError, onError }) {
   const err = (e) => onError && onError(e);
   const unsubs = [
     onSnapshot(doc(col(id, "memo"), "wifi"), (s) => onWifi(s.exists() ? s.data() : null), err),
     onSnapshot(col(id, "notes"), (qs) => onNotes(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
     onSnapshot(col(id, "checkItems"), (qs) => onItems(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
     onSnapshot(col(id, "checks"), (qs) => onChecks(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+    // « Bon à savoir » a sa propre erreur : si les règles ne sont pas encore à jour, le reste du Mémo marche quand même.
+    onSnapshot(col(id, "infos"), (qs) => onInfos(qs.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => onInfosError && onInfosError(e)),
   ];
   return () => unsubs.forEach(u => u());
 }
@@ -160,12 +162,21 @@ export function addItem(id, { list, text, order }) {
 }
 export function updateItem(id, itemId, data) { return updateDoc(doc(col(id, "checkItems"), itemId), data); }
 export function deleteItem(id, itemId) { return deleteDoc(doc(col(id, "checkItems"), itemId)); }
-export async function swapItems(id, a, b) {
+export async function swapItems(id, a, b, name = "checkItems") {
   const batch = writeBatch(getDb());
-  batch.update(doc(col(id, "checkItems"), a.id), { order: b.order });
-  batch.update(doc(col(id, "checkItems"), b.id), { order: a.order });
+  batch.update(doc(col(id, name), a.id), { order: b.order });
+  batch.update(doc(col(id, name), b.id), { order: a.order });
   await batch.commit();
 }
+
+/** Fiches « Bon à savoir » : kind « text » (texte libre) ou « contact » (nom, précision, numéros). */
+export function addInfo(id, { kind, text, name, phones, order }) {
+  return addDoc(col(id, "infos"), { kind, text, name, phones, order, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+export function updateInfo(id, infoId, data) {
+  return updateDoc(doc(col(id, "infos"), infoId), { ...data, updatedAt: serverTimestamp() });
+}
+export function deleteInfo(id, infoId) { return deleteDoc(doc(col(id, "infos"), infoId)); }
 
 /** Coche ou décoche un point. key = identifiant de la liste du séjour (ex. « stay_ABC_depart »). */
 export function setCheck(id, key, { list, stayId, itemId, checked, byId, byName }) {

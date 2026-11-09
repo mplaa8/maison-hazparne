@@ -1,4 +1,4 @@
-// Onglet « Mémo » : code wifi, points d'attention, check-lists « En arrivant » / « En partant ».
+// Onglet « Mémo » : code wifi, « Bon à savoir », points d'attention, check-lists « En arrivant » / « En partant ».
 // Toutes les données viennent de Firestore (sous le chemin secret du planning) : aucune n'est dans le code.
 import * as store from "./store.js";
 
@@ -8,8 +8,8 @@ const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet"
 const LIST_NAMES = { arrive: "En arrivant", depart: "En partant" };
 
 let ctx = null;
-const memo = { wifi: null, notes: [], items: [], checks: [], loaded: false, error: false };
-const ui = { list: "arrive", editing: false, showResolved: false, copied: false };
+const memo = { wifi: null, infos: [], notes: [], items: [], checks: [], loaded: false, error: false, infosError: false };
+const ui = { list: "arrive", editing: false, infosEditing: false, showResolved: false, copied: false };
 let unsub = null;
 
 function parse(s) { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); }
@@ -22,12 +22,14 @@ function dateOf(ts) {
 /* ---------- Données ---------- */
 export function startMemo(spaceId) {
   if (unsub) unsub();
-  Object.assign(memo, { wifi: null, notes: [], items: [], checks: [], loaded: false, error: false });
+  Object.assign(memo, { wifi: null, infos: [], notes: [], items: [], checks: [], loaded: false, error: false, infosError: false });
   unsub = store.subscribeMemo(spaceId, {
     onWifi: (w) => { memo.wifi = w; memo.loaded = true; update(); },
     onNotes: (n) => { memo.notes = n; update(); },
     onItems: (i) => { memo.items = i; update(); },
     onChecks: (c) => { memo.checks = c; update(); },
+    onInfos: (i) => { memo.infos = i; memo.infosError = false; update(); },
+    onInfosError: (e) => { console.error(e); memo.infosError = true; update(); },
     onError: (e) => { console.error(e); memo.error = true; update(); },
   });
 }
@@ -54,6 +56,14 @@ function checkKey(list) {
   const s = currentStay();
   return s ? { key: `stay_${s.id}_${list}`, stayId: s.id, stay: s } : { key: `free_${ctx.me()?.id || "tous"}_${list}`, stayId: null, stay: null };
 }
+const infosSorted = () => memo.infos.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || (a.createdAt?.seconds ?? 9e9) - (b.createdAt?.seconds ?? 9e9));
+
+/** Numéro affiché : « 05 59 70 26 43 » pour un numéro français à 10 chiffres, sinon tel quel. */
+function fmtPhone(p) {
+  const d = String(p).replace(/[^\d+]/g, "");
+  return /^0\d{9}$/.test(d) ? d.replace(/(\d{2})(?=\d)/g, "$1 ") : String(p).trim();
+}
+const telHref = (p) => "tel:" + String(p).replace(/[^\d+]/g, "");
 const itemsOf = (list) => memo.items.filter(i => i.list === list).sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || String(a.text).localeCompare(b.text));
 
 /** Dernier départ : liste « En partant » du séjour terminé le plus récemment. */
@@ -82,7 +92,7 @@ export function renderMemo() {
       <p class="small muted">Les règles de sécurité Firestore doivent être mises à jour, puis l'app rouverte.</p></div>`;
     return;
   }
-  root.innerHTML = wifiCard() + notesSection() + checklistSection();
+  root.innerHTML = wifiCard() + infosSection() + notesSection() + checklistSection();
 }
 
 function wifiCard() {
@@ -97,6 +107,48 @@ function wifiCard() {
         ? `<div class="wifi-code" id="wifi-code">${esc(code)}</div>
            <button class="btn btn-primary btn-block" data-act="wifi-copy">${ui.copied ? "Copié ✓" : "Copier"}</button>`
         : `<button class="btn btn-block" data-act="wifi-edit">${memo.loaded ? "Ajouter le code wifi" : "Chargement…"}</button>`}
+    </section>`;
+}
+
+function infosSection() {
+  const list = infosSorted();
+  const tools = (f, k) => ui.infosEditing ? `
+      <div class="info-tools">
+        <button class="tool-btn" data-act="info-up" data-id="${esc(f.id)}" ${k === 0 ? "disabled" : ""} aria-label="Monter">↑</button>
+        <button class="tool-btn" data-act="info-down" data-id="${esc(f.id)}" ${k === list.length - 1 ? "disabled" : ""} aria-label="Descendre">↓</button>
+        <button class="tool-btn" data-act="info-edit" data-id="${esc(f.id)}" aria-label="Modifier">✎</button>
+        <button class="tool-btn danger" data-act="info-del" data-id="${esc(f.id)}" aria-label="Supprimer">✕</button>
+      </div>` : "";
+  const card = (f, k) => f.kind === "contact" ? `
+    <div class="info-card info-contact">
+      <div class="info-head">
+        <div class="info-main">
+          <p class="info-name">${esc(f.name)}</p>
+          ${f.text ? `<p class="info-text muted">${esc(f.text)}</p>` : ""}
+        </div>${tools(f, k)}
+      </div>
+      ${(f.phones || []).map(p => `
+        <div class="phone-row">
+          <a class="btn phone-call" href="${esc(telHref(p))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.6 3.5h2.6l1.4 4.2-2 1.5a12 12 0 0 0 6.2 6.2l1.5-2 4.2 1.4v2.6a2 2 0 0 1-2.1 2A16.5 16.5 0 0 1 4.6 5.6a2 2 0 0 1 2-2.1z"/></svg>${esc(fmtPhone(p))}</a>
+          <button class="btn phone-copy" data-act="phone-copy" data-phone="${esc(fmtPhone(p))}" aria-label="Copier le ${esc(fmtPhone(p))}">Copier</button>
+        </div>`).join("")}
+    </div>` : `
+    <div class="info-card">
+      <div class="info-head">
+        <p class="info-text">${esc(f.text)}</p>${tools(f, k)}
+      </div>
+    </div>`;
+  if (memo.infosError) return `
+    <section class="memo-section">
+      <h3 class="memo-title">Bon à savoir</h3>
+      <div class="card"><p class="small muted">Cette section sera disponible une fois les règles de sécurité Firestore mises à jour.</p></div>
+    </section>`;
+  return `
+    <section class="memo-section">
+      <h3 class="memo-title">Bon à savoir</h3>
+      ${list.length ? list.map(card).join("") : `<p class="small muted memo-empty">${memo.loaded ? "Aucune fiche pour l'instant." : "Chargement…"}</p>`}
+      <button class="btn btn-block memo-add" data-act="info-add">+ Ajouter une fiche</button>
+      ${list.length > 0 ? `<div class="check-footer"><button class="link-btn" data-act="infos-edit-mode">${ui.infosEditing ? "Terminer" : "Modifier les fiches"}</button></div>` : ""}
     </section>`;
 }
 
@@ -194,6 +246,77 @@ function textSheet(title, label, value, okLabel, max, onOk) {
     ctx.closeSheet(); onOk(v);
   };
 }
+/** Formulaire d'une fiche « Bon à savoir » : texte libre ou contact. */
+function infoSheet(info) {
+  let kind = info?.kind || "text";
+  const editing = !!info;
+  ctx.openSheet(`
+    <h3>${editing ? "Modifier la fiche" : "Nouvelle fiche"}</h3>
+    <form id="info-form">
+      ${editing ? "" : `<div class="segmented info-kind" role="group" aria-label="Type de fiche">
+        <button type="button" data-kind="text" class="${kind === "text" ? "active" : ""}">Texte</button>
+        <button type="button" data-kind="contact" class="${kind === "contact" ? "active" : ""}">Contact</button>
+      </div>`}
+      <div id="info-text-wrap">
+        <label class="label" for="info-text">Texte</label>
+        <textarea id="info-text" maxlength="1000" rows="3">${esc(info?.kind === "text" ? info.text : "")}</textarea>
+      </div>
+      <div id="info-contact-wrap">
+        <label class="label" for="info-name">Nom</label>
+        <input id="info-name" maxlength="80" autocomplete="off" value="${esc(info?.name || "")}">
+        <label class="label" for="info-note">Précision (facultatif)</label>
+        <input id="info-note" maxlength="200" autocomplete="off" placeholder="Ex. voisin, plombier…" value="${esc(info?.kind === "contact" ? info.text : "")}">
+        <label class="label" for="info-phones">Numéros (un par ligne)</label>
+        <textarea id="info-phones" rows="2" inputmode="tel">${esc((info?.phones || []).map(fmtPhone).join("\n"))}</textarea>
+      </div>
+      <p class="error" id="info-error" hidden></p>
+      <div class="btn-row">
+        <button type="button" class="btn" id="info-cancel">Annuler</button>
+        <button type="submit" class="btn btn-primary">${editing ? "Enregistrer" : "Ajouter"}</button>
+      </div>
+    </form>`);
+  const show = () => {
+    $("#info-text-wrap").hidden = kind !== "text";
+    $("#info-contact-wrap").hidden = kind !== "contact";
+    document.querySelectorAll(".info-kind button").forEach(b => { b.classList.toggle("active", b.dataset.kind === kind); b.setAttribute("aria-pressed", b.dataset.kind === kind); });
+  };
+  show();
+  document.querySelectorAll(".info-kind button").forEach(b => b.onclick = () => { kind = b.dataset.kind; show(); (kind === "text" ? $("#info-text") : $("#info-name")).focus(); });
+  setTimeout(() => (kind === "text" ? $("#info-text") : $("#info-name")).focus(), 100);
+  $("#info-cancel").onclick = () => ctx.closeSheet();
+  $("#info-form").onsubmit = (e) => {
+    e.preventDefault();
+    const err = (m) => { const el = $("#info-error"); el.textContent = m; el.hidden = false; };
+    let data;
+    if (kind === "text") {
+      const text = $("#info-text").value.trim().slice(0, 1000);
+      if (!text) return err("Écrivez le texte de la fiche.");
+      data = { kind, text, name: "", phones: [] };
+    } else {
+      const name = $("#info-name").value.trim().slice(0, 80);
+      const phones = $("#info-phones").value.split(/[\n,;]+/).map(x => x.trim().slice(0, 30)).filter(x => x.replace(/\D/g, "").length >= 3).slice(0, 5);
+      if (!name) return err("Indiquez le nom du contact.");
+      if (!phones.length) return err("Ajoutez au moins un numéro.");
+      data = { kind, text: $("#info-note").value.trim().slice(0, 200), name, phones };
+    }
+    const sid = ctx.state.spaceId;
+    ctx.closeSheet();
+    if (editing) return store.updateInfo(sid, info.id, data).catch(fail);
+    const order = memo.infos.reduce((m, i) => Math.max(m, i.order ?? 0), 0) + 1;
+    store.addInfo(sid, { ...data, order }).catch(fail);
+  };
+}
+
+async function copyText(text, el) {
+  try { await navigator.clipboard.writeText(text); }
+  catch {
+    const t = document.createElement("textarea"); t.value = text; t.setAttribute("readonly", ""); t.style.position = "fixed"; t.style.opacity = "0";
+    document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove();
+  }
+  if (el) { el.textContent = "Copié ✓"; setTimeout(() => { el.textContent = "Copier"; }, 2000); }
+  ctx.toast("Numéro copié");
+}
+
 const fail = (ex) => { console.error(ex); ctx.toast("Erreur d'enregistrement. Réessayez."); };
 
 async function copyWifi() {
@@ -215,6 +338,25 @@ async function onClick(e) {
     case "wifi-edit":
       return textSheet(memo.wifi?.code ? "Modifier le code wifi" : "Ajouter le code wifi", "Code wifi", memo.wifi?.code, "Enregistrer", 100,
         (v) => store.setWifi(sid, v, meM?.name || null).catch(fail));
+    case "phone-copy": return copyText(b.dataset.phone, b);
+    case "info-add": return infoSheet(null);
+    case "info-edit": { const f = memo.infos.find(x => x.id === id); return f && infoSheet(f); }
+    case "info-del": {
+      const f = memo.infos.find(x => x.id === id); if (!f) return;
+      const label = f.kind === "contact" ? f.name : f.text;
+      if (await ctx.confirmBox("Supprimer cette fiche ?", `« ${String(label).slice(0, 120)} »`)) store.deleteInfo(sid, id).catch(fail);
+      return;
+    }
+    case "infos-edit-mode": ui.infosEditing = !ui.infosEditing; return renderMemo();
+    case "info-up": case "info-down": {
+      const list = infosSorted(); const k = list.findIndex(x => x.id === id);
+      const j = b.dataset.act === "info-up" ? k - 1 : k + 1;
+      if (k < 0 || j < 0 || j >= list.length) return;
+      const a = list[k], c = list[j];
+      if ((a.order ?? 0) !== (c.order ?? 0)) return store.swapItems(sid, a, c, "infos").catch(fail);
+      const next = list.slice(); next[k] = c; next[j] = a;
+      return Promise.all(next.map((x, n) => (x.order === n + 1 ? null : store.updateInfo(sid, x.id, { order: n + 1 })))).catch(fail);
+    }
     case "note-add":
       return textSheet("Nouveau point d'attention", "Que faut-il savoir ?", "", "Ajouter", 1000,
         (v) => store.addNote(sid, { text: v, authorId: meM?.id || null, authorName: meM?.name || null }).catch(fail));

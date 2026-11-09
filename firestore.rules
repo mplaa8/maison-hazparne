@@ -39,6 +39,13 @@ service cloud.firestore {
         allow delete: if true;
       }
 
+      // Mémo : fiches « Bon à savoir » (texte ou contact)
+      match /infos/{infoId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validInfo(request.resource.data);
+        allow delete: if true;
+      }
+
       // Mémo : points d'attention
       match /notes/{noteId} {
         allow read: if spaceExists();
@@ -65,6 +72,17 @@ service cloud.firestore {
       return d.keys().hasOnly(['text', 'authorId', 'authorName', 'resolved', 'resolvedAt', 'createdAt', 'updatedAt'])
         && d.text is string && d.text.size() > 0 && d.text.size() <= 1000
         && d.resolved is bool;
+    }
+
+    function validInfo(d) {
+      return d.keys().hasOnly(['kind', 'text', 'name', 'phones', 'order', 'createdAt', 'updatedAt'])
+        && d.kind in ['text', 'contact']
+        && d.text is string && d.text.size() <= 1000
+        && d.name is string && d.name.size() <= 80
+        && d.phones is list && d.phones.size() <= 5
+        && d.order is number
+        && ((d.kind == 'text' && d.text.size() > 0)
+            || (d.kind == 'contact' && d.name.size() > 0 && d.phones.size() > 0));
     }
 
     function validItem(d) {
