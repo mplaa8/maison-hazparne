@@ -70,7 +70,7 @@ const state = {
   members: [],
   stays: [],
   year: new Date().getFullYear(),
-  tab: "calendar",
+  tab: "home",
   selStart: null,
   unsub: null,
   membersLoaded: false,
@@ -251,13 +251,16 @@ function showApp() {
   const wasHidden = $("#screen-app").hidden;
   show("app");
   if (state.pendingTab) { const t = state.pendingTab; state.pendingTab = null; setTab(t); return; }
-  if (wasHidden && state.tab === "calendar") requestAnimationFrame(() => scrollToMonth());
+  // À l'ouverture de l'app (code bon ou déjà mémorisé), on arrive sur l'Accueil.
+  if (wasHidden) setTab("home");
 }
 
 function setTab(tab) {
   state.tab = tab;
   document.querySelectorAll(".tabbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const t of ["calendar", "stays", "agenda", "family", "settings"]) $("#tab-" + t).hidden = t !== tab;
+  for (const t of ["home", "calendar", "stays", "agenda", "family", "settings"]) $("#tab-" + t).hidden = t !== tab;
+  $("#screen-app").classList.toggle("on-home", tab === "home");
+  if (tab === "home") renderHome();
   $("#year-row").hidden = !(tab === "calendar" || tab === "stays");
   if (tab !== "calendar") cancelSelection();
   window.scrollTo(0, 0);
@@ -306,6 +309,7 @@ function renderAll() {
   renderCalendar();
   renderStays();
   renderMembers();
+  renderHome();
   if (state.tab === "agenda") renderAgenda();
   if (!$("#screen-whoami").hidden) renderWhoami();
 }
@@ -767,6 +771,43 @@ $("#logout-btn").onclick = async () => {
 $("#login-code").addEventListener("focus", () => {
   setTimeout(() => $("#login-form").scrollIntoView({ behavior: "smooth", block: "end" }), 350);
 });
+
+/* ---------- Accueil ---------- */
+function greeting(date = new Date()) {
+  const h = date.getHours();
+  if (h >= 5 && h < 12) return "Egun on";
+  if (h >= 12 && h < 19) return "Arratsalde on";
+  return "Gabon";
+}
+/** Prénoms des personnes à la maison aujourd'hui (hôtes, profils invités et invités extérieurs), sans doublons. */
+function peopleHomeToday() {
+  const today = todayStr();
+  const ids = new Set(), names = [], seenExt = new Set();
+  const stays = state.stays.filter(s => s.start <= today && s.end >= today).sort((a, b) => a.start.localeCompare(b.start));
+  const addMember = (id) => { const m = memberById(id); if (m && !ids.has(id)) { ids.add(id); names.push(m.name); } };
+  for (const s of stays) addMember(s.memberId);
+  for (const s of stays) guestIdsOf(s).forEach(addMember);
+  for (const s of stays) guestsOf(s).forEach(n => {
+    const k = n.trim().toLowerCase(); if (!seenExt.has(k)) { seenExt.add(k); names.push(n.trim()); }
+  });
+  return names;
+}
+function presenceText(names) {
+  if (!names.length) return "Personne n'est à la maison";
+  if (names.length === 1) return `${names[0]} est à la maison`;
+  if (names.length <= 4) return `${frList(names)} sont à la maison`;
+  return `${names.slice(0, 3).join(", ")} et ${names.length - 3} autres sont à la maison`;
+}
+function renderHome() {
+  if (!state.spaceId) return;
+  const m = me();
+  $("#home-greeting").textContent = greeting() + (m ? `, ${m.name}` : "");
+  $("#home-presence").textContent = presenceText(peopleHomeToday());
+}
+$("#home-btn").onclick = () => { if (state.tab !== "home") setTab("home"); };
+document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => setTab(b.dataset.go));
+// La salutation suit l'heure, même si l'app reste ouverte.
+setInterval(() => { if (state.tab === "home" && !document.hidden) renderHome(); }, 60000);
 
 /* ---------- Agenda ---------- */
 initAgenda({ state, memberById, me, todayStr, withText });

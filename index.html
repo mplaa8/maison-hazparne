@@ -81,7 +81,7 @@
     <header class="topbar">
       <div class="topbar-row">
         <div class="brand-wrap">
-          <img src="icons/icon-192.png" alt="" class="logo-small">
+          <button type="button" class="home-btn" id="home-btn" aria-label="Accueil"><img src="icons/icon-192.png?v=2" alt="" class="logo-small"></button>
           <span class="brand small-brand">Maison Hazparne</span>
         </div>
         <button id="me-chip" class="chip" type="button" aria-label="Changer de profil"></button>
@@ -95,7 +95,28 @@
     </header>
 
     <main class="content" id="main">
-      <section id="tab-calendar" class="tab">
+      <section id="tab-home" class="tab">
+        <div class="home-hero">
+          <picture class="hero">
+            <!-- Même logique que l'écran du code : photo de nuit en thème sombre, bascule en direct. -->
+            <source media="(prefers-color-scheme: dark)" srcset="images/maison-nuit.webp" type="image/webp">
+            <source media="(prefers-color-scheme: dark)" srcset="images/maison-nuit.jpg" type="image/jpeg">
+            <source srcset="images/maison.webp" type="image/webp">
+            <img src="images/maison.jpg" alt="La maison d'Hazparne" width="1080" height="1920">
+          </picture>
+          <h1 class="home-title">Ongi etorri</h1>
+        </div>
+        <div class="home-body">
+          <p class="home-greeting" id="home-greeting"></p>
+          <p class="home-presence"><span class="presence-dot" aria-hidden="true"></span><span id="home-presence"></span></p>
+          <div class="home-actions">
+            <button type="button" class="btn btn-primary btn-block home-action" data-go="calendar">Planning</button>
+            <button type="button" class="btn btn-block home-action" data-go="agenda">Agenda</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-calendar" class="tab" hidden>
         <div id="legend" class="legend"></div>
         <div id="calendar" class="calendar"></div>
       </section>
