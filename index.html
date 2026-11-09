@@ -20,7 +20,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,500..600,100,0&family=Hanken+Grotesk:wght@400..700&display=swap">
-  <link rel="preload" as="image" href="images/maison.webp" type="image/webp">
+  <link rel="preload" as="image" href="images/maison.webp" type="image/webp" media="(prefers-color-scheme: light)">
+  <link rel="preload" as="image" href="images/maison-nuit.webp" type="image/webp" media="(prefers-color-scheme: dark)">
   <link rel="stylesheet" href="style.css">
   <script type="module" src="app.js"></script>
 </head>
@@ -34,6 +35,10 @@
   <!-- Écran du code d'accès -->
   <div id="screen-login" class="screen login-screen" hidden>
     <picture class="hero">
+      <!-- Thème sombre (réglage du téléphone, y compris « Automatique » / « Programmé ») : photo de nuit.
+           Le navigateur rebascule tout seul, sans recharger, quand le thème change. -->
+      <source media="(prefers-color-scheme: dark)" srcset="images/maison-nuit.webp" type="image/webp">
+      <source media="(prefers-color-scheme: dark)" srcset="images/maison-nuit.jpg" type="image/jpeg">
       <source srcset="images/maison.webp" type="image/webp">
       <img src="images/maison.jpg" alt="La maison d'Hazparne sous le ciel bleu" width="1080" height="1920" fetchpriority="high">
     </picture>
