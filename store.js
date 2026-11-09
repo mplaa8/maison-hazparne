@@ -106,12 +106,12 @@ export function deleteStay(id, stayId) {
 /** Déplace toutes les données vers le chemin dérivé du nouveau code, puis efface l'ancien. */
 export async function moveSpace(oldId, newId) {
   if (await spaceExists(newId)) throw new Error("exists");
-  const [members, stays] = await Promise.all([getDocs(membersCol(oldId)), getDocs(staysCol(oldId))]);
+  // Toutes les collections du planning (y compris le Mémo) suivent le nouveau code.
+  // Une collection illisible (ex. règles pas encore à jour) est simplement ignorée.
+  const snaps = await Promise.all(ALL_COLLECTIONS.map(c =>
+    getDocs(collection(getDb(), "spaces", oldId, c)).then(qs => qs.docs.map(d => ({ col: c, id: d.id, data: d.data() }))).catch(() => [])));
   await createSpace(newId);
-  const items = [
-    ...members.docs.map(d => ({ col: "members", id: d.id, data: d.data() })),
-    ...stays.docs.map(d => ({ col: "stays", id: d.id, data: d.data() }))
-  ];
+  const items = snaps.flat();
   const d = getDb();
   for (let i = 0; i < items.length; i += 400) {
     const batch = writeBatch(d);
@@ -124,4 +124,58 @@ export async function moveSpace(oldId, newId) {
     await batch.commit();
   }
   await deleteDoc(spaceRef(oldId));
+}
+
+/* ---------- Mémo : code wifi, points d'attention, check-lists ---------- */
+// Tout est rangé sous /spaces/{id}, comme le planning : rien n'est dans le code source ni dans le dépôt.
+const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo"];
+const col = (id, name) => collection(getDb(), "spaces", id, name);
+
+/** Écoute en temps réel du Mémo. onError reçoit l'erreur (ex. règles Firestore pas encore mises à jour). */
+export function subscribeMemo(id, { onWifi, onNotes, onItems, onChecks, onError }) {
+  const err = (e) => onError && onError(e);
+  const unsubs = [
+    onSnapshot(doc(col(id, "memo"), "wifi"), (s) => onWifi(s.exists() ? s.data() : null), err),
+    onSnapshot(col(id, "notes"), (qs) => onNotes(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+    onSnapshot(col(id, "checkItems"), (qs) => onItems(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+    onSnapshot(col(id, "checks"), (qs) => onChecks(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+  ];
+  return () => unsubs.forEach(u => u());
+}
+
+export function setWifi(id, code, by) {
+  return setDoc(doc(col(id, "memo"), "wifi"), { code, updatedBy: by, updatedAt: serverTimestamp() });
+}
+
+export function addNote(id, { text, authorId, authorName }) {
+  return addDoc(col(id, "notes"), { text, authorId, authorName, resolved: false, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+}
+export function updateNote(id, noteId, data) {
+  return updateDoc(doc(col(id, "notes"), noteId), { ...data, updatedAt: serverTimestamp() });
+}
+export function deleteNote(id, noteId) { return deleteDoc(doc(col(id, "notes"), noteId)); }
+
+export function addItem(id, { list, text, order }) {
+  return addDoc(col(id, "checkItems"), { list, text, order, createdAt: serverTimestamp() });
+}
+export function updateItem(id, itemId, data) { return updateDoc(doc(col(id, "checkItems"), itemId), data); }
+export function deleteItem(id, itemId) { return deleteDoc(doc(col(id, "checkItems"), itemId)); }
+export async function swapItems(id, a, b) {
+  const batch = writeBatch(getDb());
+  batch.update(doc(col(id, "checkItems"), a.id), { order: b.order });
+  batch.update(doc(col(id, "checkItems"), b.id), { order: a.order });
+  await batch.commit();
+}
+
+/** Coche ou décoche un point. key = identifiant de la liste du séjour (ex. « stay_ABC_depart »). */
+export function setCheck(id, key, { list, stayId, itemId, checked, byId, byName }) {
+  return setDoc(doc(col(id, "checks"), key), {
+    list, stayId: stayId || null, byId: byId || null, byName: byName || null, updatedAt: serverTimestamp(),
+    checked: { [itemId]: checked ? true : deleteField() },
+  }, { merge: true });
+}
+export function clearChecks(id, key, { list, stayId, byId, byName }) {
+  return setDoc(doc(col(id, "checks"), key), {
+    list, stayId: stayId || null, byId: byId || null, byName: byName || null, updatedAt: serverTimestamp(), checked: {},
+  });
 }

@@ -29,6 +29,55 @@ service cloud.firestore {
         allow create, update: if spaceExists() && validStay(request.resource.data);
         allow delete: if true;
       }
+
+      // Mémo : code wifi (document « wifi » uniquement)
+      match /memo/{docId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && docId == 'wifi'
+          && request.resource.data.keys().hasOnly(['code', 'updatedBy', 'updatedAt'])
+          && request.resource.data.code is string && request.resource.data.code.size() <= 100;
+        allow delete: if true;
+      }
+
+      // Mémo : points d'attention
+      match /notes/{noteId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validNote(request.resource.data);
+        allow delete: if true;
+      }
+
+      // Mémo : points des check-lists « En arrivant » / « En partant »
+      match /checkItems/{itemId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validItem(request.resource.data);
+        allow delete: if true;
+      }
+
+      // Mémo : coches d'une check-list pour un séjour
+      match /checks/{checkId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validCheck(request.resource.data);
+        allow delete: if true;
+      }
+    }
+
+    function validNote(d) {
+      return d.keys().hasOnly(['text', 'authorId', 'authorName', 'resolved', 'resolvedAt', 'createdAt', 'updatedAt'])
+        && d.text is string && d.text.size() > 0 && d.text.size() <= 1000
+        && d.resolved is bool;
+    }
+
+    function validItem(d) {
+      return d.keys().hasOnly(['list', 'text', 'order', 'createdAt'])
+        && d.list in ['arrive', 'depart']
+        && d.text is string && d.text.size() > 0 && d.text.size() <= 200
+        && d.order is number;
+    }
+
+    function validCheck(d) {
+      return d.keys().hasOnly(['list', 'stayId', 'checked', 'byId', 'byName', 'updatedAt'])
+        && d.list in ['arrive', 'depart']
+        && d.checked is map && d.checked.size() <= 200;
     }
 
     function validMember(d) {

@@ -1,5 +1,6 @@
 import * as store from "./store.js";
 import { initAgenda, renderAgenda, setAgendaDates } from "./agenda.js";
+import { initMemo, renderMemo, startMemo, stopMemo, openNotesCount } from "./memo.js";
 
 /* ---------- Constantes & utilitaires ---------- */
 // Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
@@ -194,6 +195,7 @@ function enterSpace(id) {
   state.membersLoaded = false;
   state.firstRender = true;
   show("loading");
+  startMemo(id);
   state.unsub = store.subscribe(id, {
     onMembers: (list) => {
       state.members = list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "fr"));
@@ -215,6 +217,7 @@ function enterSpace(id) {
 
 function kickOut(msg) {
   if (state.unsub) { state.unsub(); state.unsub = null; }
+  stopMemo();
   lsSet(LS_SPACE, null);
   state.spaceId = null; state.members = []; state.stays = [];
   closeSheet();
@@ -258,7 +261,8 @@ function showApp() {
 function setTab(tab) {
   state.tab = tab;
   document.querySelectorAll(".tabbtn").forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
-  for (const t of ["home", "calendar", "stays", "agenda", "family", "settings"]) $("#tab-" + t).hidden = t !== tab;
+  for (const t of ["home", "calendar", "stays", "agenda", "memo", "family", "settings"]) $("#tab-" + t).hidden = t !== tab;
+  $("#settings-btn").classList.toggle("active", tab === "settings");
   $("#screen-app").classList.toggle("on-home", tab === "home");
   if (tab === "home") renderHome();
   $("#year-row").hidden = !(tab === "calendar" || tab === "stays");
@@ -266,6 +270,7 @@ function setTab(tab) {
   window.scrollTo(0, 0);
   if (tab === "calendar") requestAnimationFrame(() => scrollToMonth());
   if (tab === "agenda") renderAgenda();
+  if (tab === "memo") renderMemo();
 }
 document.querySelectorAll(".tabbtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
 
@@ -311,6 +316,7 @@ function renderAll() {
   renderMembers();
   renderHome();
   if (state.tab === "agenda") renderAgenda();
+  if (state.tab === "memo") renderMemo();
   if (!$("#screen-whoami").hidden) renderWhoami();
 }
 
@@ -803,11 +809,25 @@ function renderHome() {
   const m = me();
   $("#home-greeting").textContent = greeting() + (m ? `, ${m.name}` : "");
   $("#home-presence").textContent = presenceText(peopleHomeToday());
+  const n = openNotesCount();
+  $("#home-alert").hidden = !n;
+  $("#home-alert-text").textContent = `${n} point${n > 1 ? "s" : ""} d'attention`;
 }
+$("#home-alert").onclick = () => setTab("memo");
+$("#settings-btn").onclick = () => { if (state.tab !== "settings") setTab("settings"); };
 $("#home-btn").onclick = () => { if (state.tab !== "home") setTab("home"); };
 document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => setTab(b.dataset.go));
 // La salutation suit l'heure, même si l'app reste ouverte.
 setInterval(() => { if (state.tab === "home" && !document.hidden) renderHome(); }, 60000);
+
+/* ---------- Mémo ---------- */
+initMemo({
+  state, me, memberById, todayStr, toast, openSheet, closeSheet, confirmBox,
+  onBadge: (n) => {
+    const b = $("#memo-badge"); b.hidden = !n; b.textContent = n > 9 ? "9+" : String(n);
+    if (state.tab === "home") renderHome();
+  },
+});
 
 /* ---------- Agenda ---------- */
 initAgenda({ state, memberById, me, todayStr, withText });
