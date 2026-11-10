@@ -6,12 +6,46 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js";
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
-  doc, collection, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, writeBatch, serverTimestamp, deleteField, query, where
+  doc, collection, getDoc, getDocs, setDoc as fsSetDoc, addDoc as fsAddDoc, updateDoc as fsUpdateDoc, deleteDoc as fsDeleteDoc,
+  onSnapshot as fsOnSnapshot, writeBatch as fsWriteBatch, serverTimestamp, deleteField, query, where, waitForPendingWrites
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
 export const configured = !String(firebaseConfig.projectId || "").includes("A_REMPLIR");
+
+/* ---------- Hors connexion ----------
+   Le cache persistant de Firestore (IndexedDB, multi-onglets) garde les données déjà chargées et
+   met en file les écritures faites hors ligne ; elles partent seules au retour du réseau.
+   Ici on note seulement l'heure de la dernière réception du serveur et les écritures faites hors ligne. */
+const LS_SYNC = "mh.lastSync", LS_PENDING = "mh.offlineWrites";
+const ls = { get: (k) => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch { } } };
+let lastSync = Number(ls.get(LS_SYNC)) || null;
+export const lastSyncTime = () => lastSync;
+function noteServer(meta) {
+  if (meta && !meta.fromCache && navigator.onLine) { lastSync = Date.now(); ls.set(LS_SYNC, String(lastSync)); }
+}
+function track(promise) {
+  if (!navigator.onLine) ls.set(LS_PENDING, "1");
+  return promise;
+}
+export const hasOfflineWrites = () => ls.get(LS_PENDING) === "1";
+/** Résout quand toutes les écritures en attente ont été reçues par le serveur. */
+export async function whenSynced() {
+  await waitForPendingWrites(getDb());
+  const had = hasOfflineWrites();
+  ls.set(LS_PENDING, null);
+  lastSync = Date.now(); ls.set(LS_SYNC, String(lastSync));
+  return had;
+}
+const setDoc = (...a) => track(fsSetDoc(...a));
+const addDoc = (...a) => track(fsAddDoc(...a));
+const updateDoc = (...a) => track(fsUpdateDoc(...a));
+const deleteDoc = (...a) => track(fsDeleteDoc(...a));
+function writeBatch(d) { const b = fsWriteBatch(d); const commit = b.commit.bind(b); b.commit = () => track(commit()); return b; }
+/** onSnapshot qui note aussi l'heure des données reçues du serveur. */
+function onSnapshot(ref, next, error) {
+  return fsOnSnapshot(ref, (s) => { noteServer(s.metadata); next(s); }, error);
+}
 
 let db = null;
 function getDb() {
@@ -224,9 +258,11 @@ export async function getPhotoFull(id, photoId) {
   return s.exists() ? s.data().data : null;
 }
 
-export async function addPlace(id, data) {
-  const ref = await addDoc(col(id, "places"), { ...data, coverId: null, cover: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
-  return ref.id;
+/** Crée l'adresse et renvoie tout de suite son identifiant (l'écriture part dès que possible, même hors ligne). */
+export function addPlace(id, data) {
+  const ref = doc(col(id, "places"));
+  const done = setDoc(ref, { ...data, coverId: null, cover: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return { id: ref.id, done };
 }
 export function updatePlace(id, placeId, data) {
   return updateDoc(doc(col(id, "places"), placeId), { ...data, updatedAt: serverTimestamp() });

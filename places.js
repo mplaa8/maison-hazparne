@@ -42,6 +42,7 @@ function kmFrom(lat, lon) {
   return Math.round(2 * R * Math.asin(Math.sqrt(a)) * 10) / 10;
 }
 function distLabel(p, long) {
+  if (p.geo === "pending") return long ? "Distance calculée au retour du réseau" : "";
   if (p.km == null) return "";
   const approx = p.geo === "city" ? "≈ " : "";
   if (p.km < 1.5 && (p.city || "").toLowerCase() === "hasparren") return "à Hasparren";
@@ -85,6 +86,8 @@ function coordsFromText(s) {
 async function geocode({ name, city, address }) {
   const direct = coordsFromText(address);
   if (direct) return { ...direct, geo: "exact" };
+  // Hors connexion : pas de requête ; la distance sera calculée au retour du réseau.
+  if (!navigator.onLine) return { lat: null, lon: null, geo: "pending" };
   const q = address && !isUrl(address)
     ? (city && !address.toLowerCase().includes(city.toLowerCase()) ? `${address}, ${city}` : address)
     : [name, city].filter(Boolean).join(", ");
@@ -99,6 +102,32 @@ async function geocode({ name, city, address }) {
   } catch (e) { console.warn("Géocodage impossible", e); }
   const c = CITIES[Object.keys(CITIES).find(k => k.toLowerCase() === String(city || "").trim().toLowerCase())];
   return c ? { lat: c[0], lon: c[1], geo: "city" } : { lat: null, lon: null, geo: "none" };
+}
+
+// Adresses enregistrées hors ligne sur cet appareil : distance calculée une fois au retour du réseau.
+const pendingGeo = new Set();
+// Adresses créées hors ligne (même si l'app a été fermée depuis) : leur auteur calcule la distance une fois.
+const geoTried = new Set();
+function queueMyPendingGeo() {
+  if (!navigator.onLine) return;
+  const meId = ctx.me()?.id;
+  let added = false;
+  for (const p of data.places) {
+    if (p.geo === "pending" && !geoTried.has(p.id) && (!p.authorId || p.authorId === meId)) { geoTried.add(p.id); pendingGeo.add(p.id); added = true; }
+  }
+  if (added) setTimeout(geocodePending, 0);
+}
+async function geocodePending() {
+  if (!navigator.onLine || !pendingGeo.size) return;
+  for (const id of [...pendingGeo]) {
+    pendingGeo.delete(id);
+    const p = data.places.find(x => x.id === id);
+    if (!p || p.geo !== "pending") continue;
+    const g = await geocode(p);
+    if (g.geo === "pending") { pendingGeo.add(id); return; }
+    store.updatePlace(ctx.state.spaceId, id, { lat: g.lat, lon: g.lon, geo: g.geo, km: kmFrom(g.lat, g.lon) }).catch(fail);
+    await new Promise(r => setTimeout(r, 1100)); // Nominatim : une requête par seconde au plus
+  }
 }
 
 /* ---------- Photos : compression dans le navigateur ---------- */
@@ -198,6 +227,7 @@ export const agendaMode = () => ui.mode;
 export function renderPlaces() {
   if (!ctx || ui.mode !== "places") return;
   ensureSub();
+  queueMyPendingGeo();
   const root = $("#places-root");
   if (data.error) {
     root.innerHTML = `<div class="card"><p><strong>Les bonnes adresses ne sont pas encore activées.</strong></p>
@@ -281,7 +311,7 @@ function detailHtml(p) {
       <p class="pl-detail-score">${s.n ? `<strong>${fmt1(s.avg)} ★</strong> · ${s.n} avis` : `<span class="muted">Pas encore d'avis</span>`}</p>
       ${p.intro ? `<p class="pl-intro">${esc(p.intro)}</p>` : ""}
       <div class="pl-where">
-        ${p.km != null ? `<span>${esc(distLabel(p, true))}</span>` : ""}
+        ${p.km != null || p.geo === "pending" ? `<span class="${p.geo === "pending" ? "muted" : ""}">${esc(distLabel(p, true))}</span>` : ""}
         <a class="btn btn-small" href="${esc(mapsHref(p))}" target="_blank" rel="noopener">${isUrl(p.address) ? "Voir sur la carte ↗" : "Itinéraire ↗"}</a>
       </div>
       ${p.address && !isUrl(p.address) ? `<p class="small muted pl-address">${esc(p.address)}</p>` : ""}
@@ -297,8 +327,10 @@ function detailHtml(p) {
         ${up ? `<div class="pl-upload" role="status">
             <div class="progress"><span style="width:${Math.round(up.done / up.steps * 100)}%"></span></div>
             <span class="progress-label">${esc(up.label)}</span></div>` : ""}
-        <button class="btn btn-block pl-photo-btn" data-act="pick" ${up ? "disabled" : ""}>📷 Ajouter des photos</button>
-        <p class="small muted pl-drop-hint">Sur ordinateur, vous pouvez aussi glisser des photos ici.</p>
+        ${navigator.onLine || up
+          ? `<button class="btn btn-block pl-photo-btn" data-act="pick" ${up ? "disabled" : ""}>📷 Ajouter des photos</button>
+             <p class="small muted pl-drop-hint">Sur ordinateur, vous pouvez aussi glisser des photos ici.</p>`
+          : `<button class="btn btn-block pl-photo-btn" disabled>Connexion nécessaire pour envoyer des photos</button>`}
       </section>
 
       <section class="memo-section">
@@ -349,6 +381,7 @@ function placeSheet(p) {
       <datalist id="pl-cities">${Object.keys(CITIES).map(c => `<option value="${esc(c)}">`).join("")}</datalist>
       <label class="label" for="pl-addr">Lien Google Maps ou adresse <span class="muted">(facultatif)</span></label>
       <input id="pl-addr" maxlength="500" value="${esc(p?.address || "")}" placeholder="https://maps.app.goo.gl/… ou 12 rue…">
+      ${navigator.onLine ? "" : `<p class="small muted offline-note">Hors connexion : la distance sera calculée au retour du réseau.</p>`}
       <span class="label">Gamme de prix</span>
       <div class="segmented pl-price" role="group" aria-label="Gamme de prix">
         ${[1, 2, 3].map(n => `<button type="button" data-price="${n}" class="${pr === n ? "active" : ""}" aria-pressed="${pr === n}">${"€".repeat(n)}</button>`).join("")}
@@ -378,14 +411,20 @@ function placeSheet(p) {
     const sid = ctx.state.spaceId;
     try {
       // Une seule requête de géocodage, seulement si l'emplacement a changé.
-      const moved = !editing || fields.address !== (p.address || "") || fields.city !== (p.city || "") || (!fields.address && fields.name !== p.name) || p.geo === "none";
+      const moved = !editing || fields.address !== (p.address || "") || fields.city !== (p.city || "") || (!fields.address && fields.name !== p.name) || p.geo === "none" || p.geo === "pending";
       if (moved) {
         const g = await geocode(fields);
         Object.assign(fields, { lat: g.lat, lon: g.lon, geo: g.geo, km: kmFrom(g.lat, g.lon) });
       }
-      if (editing) { await store.updatePlace(sid, p.id, fields); ctx.closeSheet(); return; }
+      // Les écritures ne sont pas attendues : hors ligne, elles partent au retour du réseau.
+      if (editing) {
+        if (fields.geo === "pending") pendingGeo.add(p.id);
+        store.updatePlace(sid, p.id, fields).catch(fail); ctx.closeSheet(); return;
+      }
       const meM = ctx.me();
-      const id = await store.addPlace(sid, { ...fields, authorId: meM?.id || null, authorName: meM?.name || null });
+      const { id, done } = store.addPlace(sid, { ...fields, authorId: meM?.id || null, authorName: meM?.name || null });
+      done.catch(fail);
+      if (fields.geo === "pending") pendingGeo.add(id);
       ctx.closeSheet();
       ui.placeId = id; ui.justAdded = id; renderPlaces(); window.scrollTo(0, 0);
       ctx.toast("Adresse ajoutée");
@@ -437,6 +476,7 @@ function rateSheet(p) {
 
 /* ---------- Envoi des photos ---------- */
 async function uploadFiles(p, files) {
+  if (!navigator.onLine) return ctx.toast("Connexion nécessaire pour envoyer des photos");
   files = [...files].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(f.name));
   if (!files.length || ui.upload) return;
   const meM = ctx.me(), sid = ctx.state.spaceId;
@@ -502,6 +542,7 @@ function renderViewer() {
       ${n > 1 ? `<button class="pv-nav pv-prev" data-pv="prev" aria-label="Photo précédente">‹</button><button class="pv-nav pv-next" data-pv="next" aria-label="Photo suivante">›</button>` : ""}
     </div>
     <div class="pv-bottom">
+      ${!full && !navigator.onLine ? `<p class="pv-offline">Hors connexion : aperçu réduit, la photo complète s'affichera au retour du réseau.</p>` : ""}
       <p class="pv-author">Photo de <strong>${esc(authorOf(ph))}</strong>${dateOf(ph.createdAt) ? " · " + esc(dateOf(ph.createdAt)) : ""}</p>
       <div class="pv-actions">
         ${ph.id === p.coverId ? `<span class="pv-chip">✓ Photo de couverture</span>` : `<button class="pv-chip" data-pv="cover">Mettre en couverture</button>`}
@@ -607,4 +648,6 @@ export function initPlaces(context) {
     if (p) uploadFiles(p, e.dataTransfer.files);
   });
   initViewer();
+  window.addEventListener("online", () => { update(); geocodePending(); });
+  window.addEventListener("offline", update);
 }

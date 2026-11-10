@@ -197,6 +197,7 @@ function enterSpace(id) {
   state.firstRender = true;
   show("loading");
   startMemo(id);
+  setTimeout(syncAfterReconnect, 1500); // écritures restées en attente (app fermée hors ligne)
   state.unsub = store.subscribe(id, {
     onMembers: (list) => {
       state.members = list.sort((a, b) => (a.order ?? 0) - (b.order ?? 0) || a.name.localeCompare(b.name, "fr"));
@@ -744,6 +745,7 @@ $("#code-form").addEventListener("submit", async (e) => {
   err.hidden = true;
   if (store.normalizeCode(a) !== store.normalizeCode(b)) { err.textContent = "Les deux codes ne sont pas identiques."; err.hidden = false; return; }
   if (store.normalizeCode(a).length < 8) { err.textContent = "Le code doit contenir au moins 8 lettres ou chiffres."; err.hidden = false; return; }
+  if (!navigator.onLine) { err.textContent = "Connexion nécessaire pour changer le code."; err.hidden = false; return; }
   const ok = await confirmBox("Changer le code ?", `Le nouveau code sera « ${a.trim()} ». Tous les autres téléphones devront le saisir. Notez-le bien avant de continuer.`, "Changer le code", false);
   if (!ok) return;
   const btn = e.submitter || $("#code-form button[type=submit]");
@@ -840,9 +842,59 @@ initPlaces({ state, me, memberById, toast, openSheet, closeSheet, confirmBox, sh
   if (m) { setAgendaDates(m[1], m[2]); state.pendingTab = "agenda"; }
 }
 
+/* ---------- Hors connexion ---------- */
+// Le code d'accès mémorisé suffit : le planning s'ouvre depuis le cache local de Firestore.
+// Bandeau discret en haut ; ce qui demande Internet est grisé (classe « is-offline » sur <html>).
+const dfSync = new Intl.DateTimeFormat("fr-FR", { day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" });
+let syncedTimer = null;
+function renderNet() {
+  const off = !navigator.onLine;
+  document.documentElement.classList.toggle("is-offline", off);
+  const b = $("#net-banner");
+  if (off) {
+    clearTimeout(syncedTimer);
+    const t = store.lastSyncTime();
+    b.className = "net-banner";
+    b.textContent = "Hors connexion" + (t ? ` · données du ${dfSync.format(new Date(t))}` : "");
+    b.hidden = false;
+  } else if (!b.classList.contains("synced")) b.hidden = true;
+}
+function syncAfterReconnect() {
+  if (!navigator.onLine || !state.spaceId || !store.hasOfflineWrites()) return;
+  store.whenSynced().then((had) => {
+    if (!had || !navigator.onLine) return;
+    const b = $("#net-banner");
+    b.className = "net-banner synced"; b.textContent = "Synchronisé ✓"; b.hidden = false;
+    clearTimeout(syncedTimer);
+    syncedTimer = setTimeout(() => { b.hidden = true; b.className = "net-banner"; }, 2500);
+  }).catch(() => { });
+}
+window.addEventListener("offline", renderNet);
+window.addEventListener("online", () => { renderNet(); syncAfterReconnect(); });
+renderNet();
+
+/* ---------- Nouvelle version ---------- */
+// La nouvelle version s'installe en arrière-plan ; on propose de l'activer au lieu de recharger tout seul.
+let updateAsked = false;
+function offerUpdate(worker) {
+  if (!navigator.serviceWorker.controller) return; // première installation : rien à proposer
+  const bar = $("#update-banner");
+  bar.hidden = false;
+  $("#update-btn").onclick = () => { updateAsked = true; $("#update-btn").disabled = true; worker.postMessage({ type: "SKIP_WAITING" }); };
+}
+
 /* ---------- Démarrage ---------- */
 if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => { }));
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (updateAsked) location.reload(); });
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").then((reg) => {
+    if (reg.waiting) offerUpdate(reg.waiting);
+    reg.addEventListener("updatefound", () => {
+      const w = reg.installing;
+      w && w.addEventListener("statechange", () => { if (w.state === "installed") offerUpdate(w); });
+    });
+    // Vérifie s'il y a une nouvelle version quand l'app revient au premier plan.
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && navigator.onLine) reg.update().catch(() => { }); });
+  }).catch(() => { }));
 }
 document.addEventListener("visibilitychange", () => {
   // Si l'app reste ouverte plusieurs jours, on rafraîchit « aujourd'hui ».

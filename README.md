@@ -32,3 +32,15 @@ L'onglet « Agenda » affiche les événements qui chevauchent un séjour.
 - `scripts/build-events.mjs` : fusionne la liste de référence avec l'agenda culturel ouvert du Gouvernement basque
   (Kulturklik, `api.euskadi.eus`, sans clé) et écrit `data/events.json` et `data/live/AAAA-MM.json`.
 - `.github/workflows/agenda.yml` : relance ce script chaque nuit (GitHub Actions, gratuit).
+
+## Hors connexion
+
+- `sw.js` (service worker) garde l'app en cache : la page HTML vient du réseau d'abord (dernière version
+  quand on est en ligne), le reste (CSS, JS, icônes, photos de la maison, polices, SDK Firebase) du cache d'abord.
+  Les données de l'Agenda (`data/`) viennent du réseau d'abord, sinon de la dernière copie.
+- Les données du planning, du Mémo et des Restos & bars restent lisibles grâce au cache persistant de Firestore ;
+  les modifications faites hors ligne partent seules au retour du réseau.
+- **Avant chaque publication qui modifie l'app**, lancer `scripts/new-version.sh` : il met le même numéro de
+  version dans `sw.js` et `index.html`. Les téléphones verront alors « Nouvelle version disponible · Mettre à jour ».
+  (Les mises à jour nocturnes de l'agenda ne touchent que `data/` et n'en ont pas besoin.)
+
