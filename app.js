@@ -1,6 +1,7 @@
 import * as store from "./store.js";
 import { initAgenda, renderAgenda, setAgendaDates } from "./agenda.js";
 import { initMemo, renderMemo, startMemo, stopMemo, openNotesCount } from "./memo.js";
+import { initPlaces, renderPlaces, stopPlaces } from "./places.js";
 
 /* ---------- Constantes & utilitaires ---------- */
 // Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
@@ -218,6 +219,7 @@ function enterSpace(id) {
 function kickOut(msg) {
   if (state.unsub) { state.unsub(); state.unsub = null; }
   stopMemo();
+  stopPlaces();
   lsSet(LS_SPACE, null);
   state.spaceId = null; state.members = []; state.stays = [];
   closeSheet();
@@ -269,7 +271,7 @@ function setTab(tab) {
   if (tab !== "calendar") cancelSelection();
   window.scrollTo(0, 0);
   if (tab === "calendar") requestAnimationFrame(() => scrollToMonth());
-  if (tab === "agenda") renderAgenda();
+  if (tab === "agenda") { renderAgenda(); renderPlaces(); }
   if (tab === "memo") renderMemo();
 }
 document.querySelectorAll(".tabbtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -315,7 +317,7 @@ function renderAll() {
   renderStays();
   renderMembers();
   renderHome();
-  if (state.tab === "agenda") renderAgenda();
+  if (state.tab === "agenda") { renderAgenda(); renderPlaces(); }
   if (state.tab === "memo") renderMemo();
   if (!$("#screen-whoami").hidden) renderWhoami();
 }
@@ -831,6 +833,7 @@ initMemo({
 
 /* ---------- Agenda ---------- */
 initAgenda({ state, memberById, me, todayStr, withText });
+initPlaces({ state, me, memberById, toast, openSheet, closeSheet, confirmBox, showWhoami, renderAgenda });
 // Lien direct possible : …/#agenda=2027-07-12_2027-07-20
 {
   const m = location.hash.match(/^#agenda=(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);

@@ -7,7 +7,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, collection, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
-  onSnapshot, writeBatch, serverTimestamp, deleteField
+  onSnapshot, writeBatch, serverTimestamp, deleteField, query, where
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
@@ -113,9 +113,18 @@ export async function moveSpace(oldId, newId) {
   await createSpace(newId);
   const items = snaps.flat();
   const d = getDb();
-  for (let i = 0; i < items.length; i += 400) {
+  // Lots de 400 documents au plus et d'environ 5 Mo au plus (les photos sont lourdes).
+  const chunks = [];
+  let cur = [], bytes = 0;
+  for (const it of items) {
+    const size = JSON.stringify(it.data).length;
+    if (cur.length && (cur.length >= 400 || bytes + size > 5e6)) { chunks.push(cur); cur = []; bytes = 0; }
+    cur.push(it); bytes += size;
+  }
+  if (cur.length) chunks.push(cur);
+  for (const c of chunks) {
     const batch = writeBatch(d);
-    items.slice(i, i + 400).forEach(it => batch.set(doc(d, "spaces", newId, it.col, it.id), it.data));
+    c.forEach(it => batch.set(doc(d, "spaces", newId, it.col, it.id), it.data));
     await batch.commit();
   }
   for (let i = 0; i < items.length; i += 400) {
@@ -128,7 +137,7 @@ export async function moveSpace(oldId, newId) {
 
 /* ---------- Mémo : code wifi, points d'attention, check-lists ---------- */
 // Tout est rangé sous /spaces/{id}, comme le planning : rien n'est dans le code source ni dans le dépôt.
-const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo", "infos"];
+const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo", "infos", "places", "ratings", "placePhotos", "placePhotoFull"];
 const col = (id, name) => collection(getDb(), "spaces", id, name);
 
 /** Écoute en temps réel du Mémo. onError reçoit l'erreur (ex. règles Firestore pas encore mises à jour). */
@@ -189,4 +198,82 @@ export function clearChecks(id, key, { list, stayId, byId, byName }) {
   return setDoc(doc(col(id, "checks"), key), {
     list, stayId: stayId || null, byId: byId || null, byName: byName || null, updatedAt: serverTimestamp(), checked: {},
   });
+}
+
+/* ---------- Restos & bars : adresses, notes, photos ---------- */
+// Photos : pas de Firebase Storage. Chaque photo est compressée dans le navigateur puis rangée dans
+// deux documents Firestore : « placePhotos » (miniature, pour les galeries) et « placePhotoFull »
+// (photo complète, chargée seulement à l'ouverture). Même identifiant pour les deux.
+
+/** Écoute des adresses et des notes (léger : seule la miniature de couverture est dans l'adresse). */
+export function subscribePlaces(id, { onPlaces, onRatings, onError }) {
+  const err = (e) => onError && onError(e);
+  const unsubs = [
+    onSnapshot(col(id, "places"), (qs) => onPlaces(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+    onSnapshot(col(id, "ratings"), (qs) => onRatings(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+  ];
+  return () => unsubs.forEach(u => u());
+}
+/** Miniatures d'une adresse, en temps réel. */
+export function subscribePlacePhotos(id, placeId, onPhotos, onError) {
+  return onSnapshot(query(col(id, "placePhotos"), where("placeId", "==", placeId)),
+    (qs) => onPhotos(qs.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => onError && onError(e));
+}
+export async function getPhotoFull(id, photoId) {
+  const s = await getDoc(doc(col(id, "placePhotoFull"), photoId));
+  return s.exists() ? s.data().data : null;
+}
+
+export async function addPlace(id, data) {
+  const ref = await addDoc(col(id, "places"), { ...data, coverId: null, cover: null, createdAt: serverTimestamp(), updatedAt: serverTimestamp() });
+  return ref.id;
+}
+export function updatePlace(id, placeId, data) {
+  return updateDoc(doc(col(id, "places"), placeId), { ...data, updatedAt: serverTimestamp() });
+}
+/** Supprime l'adresse avec ses notes et ses photos. */
+export async function deletePlace(id, placeId) {
+  const d = getDb();
+  const [r, p] = await Promise.all([
+    getDocs(query(col(id, "ratings"), where("placeId", "==", placeId))),
+    getDocs(query(col(id, "placePhotos"), where("placeId", "==", placeId))),
+  ]);
+  const refs = [...r.docs.map(x => x.ref), ...p.docs.flatMap(x => [x.ref, doc(col(id, "placePhotoFull"), x.id)])];
+  for (let i = 0; i < refs.length; i += 400) {
+    const batch = writeBatch(d);
+    refs.slice(i, i + 400).forEach(ref => batch.delete(ref));
+    await batch.commit();
+  }
+  await deleteDoc(doc(col(id, "places"), placeId));
+}
+
+/** Note d'un membre : un seul document par personne et par adresse (identifiant fixe). */
+export function setRating(id, { placeId, memberId, memberName, stars, comment }) {
+  return setDoc(doc(col(id, "ratings"), `${placeId}_${memberId}`),
+    { placeId, memberId, memberName, stars, comment, updatedAt: serverTimestamp() });
+}
+export function deleteRating(id, placeId, memberId) { return deleteDoc(doc(col(id, "ratings"), `${placeId}_${memberId}`)); }
+
+/** Enregistre une photo (miniature + complète). Si l'adresse n'a pas de couverture, elle le devient. */
+export async function addPhoto(id, { placeId, thumb, full, authorId, authorName, setCover }) {
+  const d = getDb();
+  const ref = doc(col(id, "placePhotos"));
+  const batch = writeBatch(d);
+  batch.set(doc(col(id, "placePhotoFull"), ref.id), { placeId, data: full });
+  batch.set(ref, { placeId, thumb, authorId, authorName, createdAt: serverTimestamp() });
+  if (setCover) batch.update(doc(col(id, "places"), placeId), { coverId: ref.id, cover: thumb, updatedAt: serverTimestamp() });
+  await batch.commit();
+  return ref.id;
+}
+export async function deletePhoto(id, placeId, photoId, nextCover) {
+  const batch = writeBatch(getDb());
+  batch.delete(doc(col(id, "placePhotos"), photoId));
+  batch.delete(doc(col(id, "placePhotoFull"), photoId));
+  if (nextCover !== undefined) {
+    batch.update(doc(col(id, "places"), placeId), { coverId: nextCover?.id || null, cover: nextCover?.thumb || null, updatedAt: serverTimestamp() });
+  }
+  await batch.commit();
+}
+export function setCover(id, placeId, photo) {
+  return updateDoc(doc(col(id, "places"), placeId), { coverId: photo.id, cover: photo.thumb, updatedAt: serverTimestamp() });
 }

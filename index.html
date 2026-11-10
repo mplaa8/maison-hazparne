@@ -132,6 +132,11 @@
 
       <section id="tab-agenda" class="tab" hidden>
         <h2 class="section-title">Agenda</h2>
+        <div class="segmented ag-mode" id="ag-mode" role="group" aria-label="Choisir la rubrique">
+          <button type="button" class="active" data-mode="events" aria-pressed="true">Événements</button>
+          <button type="button" data-mode="places" aria-pressed="false">Restos &amp; bars</button>
+        </div>
+        <div id="ag-events">
         <p class="muted agenda-intro">Fêtes, festivals et sorties autour de la maison pendant un séjour.</p>
         <label class="label" for="ag-stay">Séjour</label>
         <select id="ag-stay"></select>
@@ -145,6 +150,8 @@
         </div>
         <p id="ag-summary" class="small muted ag-summary"></p>
         <div id="ag-list"></div>
+        </div>
+        <div id="places-root" hidden></div>
       </section>
 
       <section id="tab-memo" class="tab" hidden>

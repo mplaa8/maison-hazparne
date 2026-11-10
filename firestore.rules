@@ -46,6 +46,45 @@ service cloud.firestore {
         allow delete: if true;
       }
 
+      // Agenda › Restos & bars : adresses (avec la miniature de couverture)
+      match /places/{placeId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validPlace(request.resource.data);
+        allow delete: if true;
+      }
+
+      // Restos & bars : une note par personne et par adresse (identifiant « adresse_personne »)
+      match /ratings/{ratingId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validRating(request.resource.data)
+          && ratingId == request.resource.data.placeId + '_' + request.resource.data.memberId;
+        allow delete: if true;
+      }
+
+      // Restos & bars : miniature d'une photo (≈ 25 Ko). Une photo ne se modifie pas.
+      match /placePhotos/{photoId} {
+        allow read: if spaceExists();
+        allow create: if spaceExists()
+          && request.resource.data.keys().hasOnly(['placeId', 'thumb', 'authorId', 'authorName', 'createdAt'])
+          && request.resource.data.placeId is string && request.resource.data.placeId.size() <= 64
+          && request.resource.data.thumb is string && request.resource.data.thumb.size() <= 36000
+          && request.resource.data.thumb.matches('^data:image/(webp|jpeg);base64,.*');
+        allow update: if false;
+        allow delete: if true;
+      }
+
+      // Restos & bars : photo complète (≈ 200 Ko), chargée seulement à l'ouverture.
+      match /placePhotoFull/{photoId} {
+        allow read: if spaceExists();
+        allow create: if spaceExists()
+          && request.resource.data.keys().hasOnly(['placeId', 'data'])
+          && request.resource.data.placeId is string && request.resource.data.placeId.size() <= 64
+          && request.resource.data.data is string && request.resource.data.data.size() <= 280000
+          && request.resource.data.data.matches('^data:image/(webp|jpeg);base64,.*');
+        allow update: if false;
+        allow delete: if true;
+      }
+
       // Mémo : points d'attention
       match /notes/{noteId} {
         allow read: if spaceExists();
@@ -83,6 +122,33 @@ service cloud.firestore {
         && d.order is number
         && ((d.kind == 'text' && d.text.size() > 0)
             || (d.kind == 'contact' && d.name.size() > 0 && d.phones.size() > 0));
+    }
+
+    function optNumber(x) { return x == null || x is number; }
+    function optString(x, n) { return x == null || (x is string && x.size() <= n); }
+
+    function validPlace(d) {
+      return d.keys().hasOnly(['name', 'type', 'city', 'address', 'price', 'intro', 'lat', 'lon', 'geo', 'km',
+                               'authorId', 'authorName', 'coverId', 'cover', 'createdAt', 'updatedAt'])
+        && d.name is string && d.name.size() > 0 && d.name.size() <= 80
+        && d.type in ['resto', 'bar', 'cafe', 'cidrerie', 'autre']
+        && d.city is string && d.city.size() <= 60
+        && d.address is string && d.address.size() <= 500
+        && d.price is int && d.price >= 0 && d.price <= 3
+        && d.intro is string && d.intro.size() <= 600
+        && optNumber(d.get('lat', null)) && optNumber(d.get('lon', null)) && optNumber(d.get('km', null))
+        && optString(d.get('geo', null), 10)
+        && optString(d.get('authorId', null), 64) && optString(d.get('authorName', null), 40)
+        && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000);
+    }
+
+    function validRating(d) {
+      return d.keys().hasOnly(['placeId', 'memberId', 'memberName', 'stars', 'comment', 'updatedAt'])
+        && d.placeId is string && d.placeId.size() > 0 && d.placeId.size() <= 64
+        && d.memberId is string && d.memberId.size() > 0 && d.memberId.size() <= 64
+        && d.memberName is string && d.memberName.size() <= 40
+        && d.stars is int && d.stars >= 1 && d.stars <= 5
+        && d.comment is string && d.comment.size() <= 500;
     }
 
     function validItem(d) {

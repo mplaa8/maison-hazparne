@@ -108,7 +108,7 @@ function currentRange() {
 /* ---------- Liste ---------- */
 let renderToken = 0;
 export async function renderAgenda() {
-  if (!ctx) return;
+  if (!ctx || $("#ag-events").hidden) return;
   renderStaySelect();
   const token = ++renderToken;
   const list = $("#ag-list"), summary = $("#ag-summary");
