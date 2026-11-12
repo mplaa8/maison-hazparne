@@ -1,5 +1,5 @@
 {
- "generatedAt": "2026-11-11T11:08:41.009Z",
+ "generatedAt": "2026-11-12T11:26:54.489Z",
  "home": {
   "name": "Hasparren",
   "lat": 43.3843,
@@ -11,7 +11,7 @@
  },
  "sources": {
   "reference": 43,
-  "kulturklik": 1463,
+  "kulturklik": 1481,
   "kulturklikError": null
  },
  "liveMonths": [
