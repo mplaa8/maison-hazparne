@@ -5,7 +5,7 @@
 // - VERSION change à chaque publication : la nouvelle version s'installe en arrière-plan et l'app
 //   propose « Mettre à jour » (pas de rechargement automatique).
 // Les données du planning ne passent pas par ici : c'est le cache persistant de Firestore qui les garde.
-const VERSION = "2026-11-10-1912";
+const VERSION = "2026-11-12-2038";
 const APP_CACHE = "mh-app-" + VERSION;
 const RUNTIME_CACHE = "mh-runtime-v1"; // polices, SDK, images de l'Agenda, données : gardé d'une version à l'autre
 

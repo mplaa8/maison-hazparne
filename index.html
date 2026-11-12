@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="app-version" content="2026-11-10-1912">
+  <meta name="app-version" content="2026-11-12-2038">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Maison Hazparne</title>
   <meta name="description" content="Planning partagé de la maison de famille à Hazparne">
@@ -125,6 +125,12 @@
       <section id="tab-calendar" class="tab" hidden>
         <div id="legend" class="legend"></div>
         <div id="calendar" class="calendar"></div>
+        <details class="cal-legend">
+          <summary>Légende du calendrier</summary>
+          <p><span class="lg-ferie" aria-hidden="true"></span>Jour férié</p>
+          <p><span class="lg-vac" aria-hidden="true"></span>Vacances scolaires · zone C</p>
+          <p class="small muted">Sources : calendrier.api.gouv.fr (jours fériés, métropole) et data.education.gouv.fr (calendrier scolaire).</p>
+        </details>
       </section>
 
       <section id="tab-stays" class="tab" hidden>

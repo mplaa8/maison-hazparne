@@ -351,6 +351,34 @@ function renderLegend() {
     : `<span class="muted">Ajoutez les membres de la famille dans l'onglet « Famille ».</span>`;
 }
 
+/* ---------- Jours fériés & vacances scolaires (zone C) ---------- */
+// data/calendrier.json est généré à partir des sources officielles (voir scripts/) : le téléphone ne
+// contacte aucun service extérieur, et le fichier reste disponible hors connexion.
+const cal = { feries: {}, vacances: [] };
+fetch("data/calendrier.json").then(r => (r.ok ? r.json() : null)).then((j) => {
+  if (!j) return;
+  cal.feries = j.feries || {}; cal.vacances = j.vacances || [];
+  if (state.spaceId) renderCalendar();
+}).catch(() => { });
+const vacOf = (ds) => cal.vacances.find(v => v.start <= ds && ds <= v.end) || null;
+function dayMonthText(ds) { const d = parse(ds); return `${d.getUTCDate()}${d.getUTCDate() === 1 ? "er" : ""} ${MONTHS[d.getUTCMonth()]}`; }
+/** Lignes d'information d'un jour : « Jour férié · … », « Vacances … (zone C) · du … au … ». */
+function calInfo(ds) {
+  const out = [];
+  if (cal.feries[ds]) out.push(`Jour férié · ${cal.feries[ds]}`);
+  const v = vacOf(ds);
+  if (v) out.push(`${v.name} (zone C) · du ${dayMonthText(v.start)} au ${dayMonthText(v.end)}${v.reprise ? `, reprise le ${dayMonthText(v.reprise)}` : ""}`);
+  return out;
+}
+/** Nom court affiché dans la case d'un jour férié. */
+const FERIE_SHORT = {
+  "Jour de l'an": "1er janv.", "1er janvier": "1er janv.", "Lundi de Pâques": "Pâques", "Fête du Travail": "1er mai", "Fête du travail": "1er mai",
+  "Victoire 1945": "8 mai", "8 mai 1945": "8 mai", "Ascension": "Ascension", "Lundi de Pentecôte": "Pentecôte",
+  "Fête nationale": "14 juillet", "14 juillet": "14 juillet", "Assomption": "15 août", "Toussaint": "Toussaint",
+  "Armistice 1918": "11 nov.", "11 novembre": "11 nov.", "Noël": "Noël", "Jour de Noël": "Noël",
+};
+const ferieShort = (n) => FERIE_SHORT[n] || n;
+
 function renderCalendar() {
   const y = state.year;
   const map = staysByDay(y);
@@ -375,6 +403,17 @@ function renderCalendar() {
       if (ds < today) cls.push("past");
       if (here.length) cls.push("busy");
       if (state.selStart === ds) cls.push("sel-start");
+      const fer = cal.feries[ds], vac = vacOf(ds);
+      if (fer) cls.push("ferie");
+      const ferTag = fer ? `<span class="fer-tag" aria-hidden="true">${esc(ferieShort(fer))}</span>` : "";
+      if (vac) {
+        cls.push("vac");
+        // Bande continue d'un jour à l'autre (dans la même semaine)
+        const vs = wd === 0 || d === 1 || vacOf(ymd(y, m, d - 1)) !== vac;
+        const ve = wd === 6 || d === nDays || vacOf(ymd(y, m, d + 1)) !== vac;
+        if (vs) cls.push("vs");
+        if (ve) cls.push("ve");
+      }
       if (here.length) {
         // Pastille continue sur les jours occupés consécutifs (dans la même semaine).
         const prevBusy = wd > 0 && d > 1 && (map.get(ymd(y, m, d - 1)) || []).length;
@@ -386,13 +425,15 @@ function renderCalendar() {
       const bars = here.length
         ? `<div class="bars">${shown.map(x => `<span style="background:${esc(col(memberById(x.memberId)?.color))}"></span>`).join("")}${here.length > 4 ? `<em>+${here.length - 4}</em>` : ""}</div>`
         : "";
-      const label = `${d} ${MONTHS[m]}${here.length ? " : " + here.map(x => memberById(x.memberId)?.name || "?").join(", ") : ""}`;
-      cells += `<button class="${cls.join(" ")}" data-date="${ds}" aria-label="${esc(label)}"><span class="num">${d}</span>${bars}</button>`;
+      const info = calInfo(ds);
+      const label = `${d} ${MONTHS[m]}${here.length ? " : " + here.map(x => memberById(x.memberId)?.name || "?").join(", ") : ""}${info.length ? " · " + info.join(" · ") : ""}`;
+      cells += `<button class="${cls.join(" ")}" data-date="${ds}" aria-label="${esc(label)}"><span class="num">${d}</span>${ferTag}${bars}</button>`;
     }
     const isCurrent = y === now.getFullYear() && m === now.getMonth();
     html += `
       <section class="month ${isCurrent ? "current" : ""}" id="month-${m}">
         <h2 class="month-title"><span>${cap(MONTHS[m])} ${y}</span>${busyDays ? `<span class="count">${busyDays} j. occupé${busyDays > 1 ? "s" : ""}</span>` : ""}</h2>
+        ${monthNote(y, m, nDays)}
         <div class="weekdays">${WEEKDAYS_SHORT.map(w => `<div>${w}</div>`).join("")}</div>
         <div class="days">${cells}</div>
       </section>`;
@@ -402,6 +443,13 @@ function renderCalendar() {
     state.firstRender = false;
     requestAnimationFrame(() => scrollToMonth());
   }
+}
+
+/** Mini-repère sous le titre du mois : « Vacances de printemps · zone C ». */
+function monthNote(y, m, nDays) {
+  const a = ymd(y, m, 1), z = ymd(y, m, nDays);
+  const v = cal.vacances.filter(x => x.start <= z && x.end >= a);
+  return v.length ? `<p class="month-note"><span class="month-note-mark" aria-hidden="true"></span>${esc(v.map(x => x.name).join(" · "))} · zone C</p>` : "";
 }
 
 function renderStays() {
@@ -458,7 +506,8 @@ $("#calendar").addEventListener("click", (e) => {
 function beginSelection(ds) {
   if (!state.members.length) { toast("Ajoutez d'abord les membres dans l'onglet « Famille »."); return; }
   state.selStart = ds;
-  $("#select-text").textContent = `Arrivée : ${shortDate(ds)}. Touchez maintenant le jour de départ.`;
+  const v = vacOf(ds), info = [cal.feries[ds] && `${cal.feries[ds]}, jour férié`, v && `${v.name}, zone C`].filter(Boolean);
+  $("#select-text").textContent = `Arrivée : ${shortDate(ds)}${info.length ? ` · ${info.join(" · ")}` : ""}. Touchez maintenant le jour de départ.`;
   $("#select-banner").hidden = false;
   renderCalendar();
 }
@@ -501,6 +550,7 @@ function openDaySheet(ds, here) {
   }).join("");
   openSheet(`
     <h3>${esc(longDate(ds))}</h3>
+    ${calInfo(ds).map(t => `<p class="day-cal-info">${esc(t)}</p>`).join("")}
     <p class="label">À la maison · ${total} personne${total > 1 ? "s" : ""}</p>
     ${lines}
     <div style="height:14px"></div>
