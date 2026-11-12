@@ -151,3 +151,12 @@ const result = {
 };
 await writeFile(new URL("data/events.json", ROOT), JSON.stringify(result, null, 1) + "\n");
 console.log(`events.json : ${reference.length} événements de référence ; Kulturklik : ${live.length} événements sur ${byMonth.size} mois${liveError ? " (erreur : " + liveError + ")" : ""}`);
+
+// Jours fériés et vacances scolaires (onglet « Planning ») : lancé ici pour profiter de la même tâche de nuit.
+// Processus séparé : une panne de ces sources n'affecte jamais l'agenda.
+{
+  const { spawnSync } = await import("node:child_process");
+  const { fileURLToPath } = await import("node:url");
+  const r = spawnSync(process.execPath, ["scripts/build-calendar.mjs"], { cwd: fileURLToPath(ROOT), stdio: "inherit", timeout: 120000 });
+  if (r.status !== 0) console.error("Calendrier : échec, le fichier précédent est conservé.");
+}

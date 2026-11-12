@@ -1,5 +1,5 @@
 # Régénère chaque nuit data/events.json et data/live/*.json (agenda de l'onglet « Agenda »)
-# et data/calendrier.json (jours fériés et vacances scolaires de la zone C, onglet « Planning »).
+# et data/calendrier.json (jours fériés et vacances zone C, lancé par build-events.mjs).
 # Gratuit : GitHub Actions est inclus pour les dépôts publics. Aucune clé n'est nécessaire.
 name: Mise à jour de l'agenda
 
@@ -28,9 +28,6 @@ jobs:
           node-version: 20
       - name: Générer l'agenda
         run: node scripts/build-events.mjs
-      - name: Jours fériés et vacances scolaires (zone C)
-        run: node scripts/build-calendar.mjs
-        continue-on-error: true   # en cas de panne d'une source, on garde le fichier précédent
       - name: Enregistrer les changements
         run: |
           if [ -n "$(git status --porcelain data)" ]; then
