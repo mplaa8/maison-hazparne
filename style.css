@@ -762,3 +762,14 @@ span.pv-chip { border-color: transparent; background: rgba(255,255,255,.12); cur
   font-size: 9px; line-height: 11px; font-weight: 600; color: var(--hol); text-align: center;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none;
 }
+
+/* ---------- Bannières de saison ---------- */
+/* Sans cadre ni fond ; le trait (currentColor) suit la couleur du texte, donc le thème. */
+.saison { color: var(--text); margin: 0 auto; }
+.saison svg { display: block; width: 100%; height: auto; }
+.saison-home { max-width: 520px; margin: -6px auto 14px; }
+.saison-login { max-width: 320px; margin: -6px auto 10px; }
+.saison:not([hidden]) { animation: saison-in .9s ease-out both; }
+@keyframes saison-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .saison:not([hidden]) { animation: none; } }
+

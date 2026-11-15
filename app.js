@@ -2,6 +2,7 @@ import * as store from "./store.js";
 import { initAgenda, renderAgenda, setAgendaDates } from "./agenda.js";
 import { initMemo, renderMemo, startMemo, stopMemo, openNotesCount } from "./memo.js";
 import { initPlaces, renderPlaces, stopPlaces } from "./places.js";
+import { applySeason } from "./saisons.js";
 
 /* ---------- Constantes & utilitaires ---------- */
 // Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
@@ -947,7 +948,8 @@ if ("serviceWorker" in navigator) {
   }).catch(() => { }));
 }
 document.addEventListener("visibilitychange", () => {
-  // Si l'app reste ouverte plusieurs jours, on rafraîchit « aujourd'hui ».
-  if (document.visibilityState === "visible" && state.spaceId) renderCalendar();
+  // Si l'app reste ouverte plusieurs jours, on rafraîchit « aujourd'hui » (et la bannière de saison).
+  if (document.visibilityState === "visible") { applySeason(); if (state.spaceId) renderCalendar(); }
 });
+applySeason(); // avant l'affichage des écrans : la bannière ne décale rien après coup
 start();
