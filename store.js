@@ -7,7 +7,8 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/11.0.2/firebas
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
   doc, collection, getDoc, getDocs, setDoc as fsSetDoc, addDoc as fsAddDoc, updateDoc as fsUpdateDoc, deleteDoc as fsDeleteDoc,
-  onSnapshot as fsOnSnapshot, writeBatch as fsWriteBatch, serverTimestamp, deleteField, query, where, waitForPendingWrites
+  onSnapshot as fsOnSnapshot, writeBatch as fsWriteBatch, serverTimestamp, deleteField, query, where, waitForPendingWrites,
+  increment, arrayUnion, arrayRemove, getAggregateFromServer, count, sum
 } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js";
 import { firebaseConfig } from "./config.js";
 
@@ -171,7 +172,8 @@ export async function moveSpace(oldId, newId) {
 
 /* ---------- Mémo : code wifi, points d'attention, check-lists ---------- */
 // Tout est rangé sous /spaces/{id}, comme le planning : rien n'est dans le code source ni dans le dépôt.
-const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo", "infos", "places", "ratings", "placePhotos", "placePhotoFull"];
+const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo", "infos", "places", "ratings", "placePhotos", "placePhotoFull",
+  "albums", "albumEvents", "albumPhotos", "albumPhotoFull", "settings"];
 const col = (id, name) => collection(getDb(), "spaces", id, name);
 
 /** Écoute en temps réel du Mémo. onError reçoit l'erreur (ex. règles Firestore pas encore mises à jour). */
@@ -296,7 +298,8 @@ export async function addPhoto(id, { placeId, thumb, full, authorId, authorName,
   const ref = doc(col(id, "placePhotos"));
   const batch = writeBatch(d);
   batch.set(doc(col(id, "placePhotoFull"), ref.id), { placeId, data: full });
-  batch.set(ref, { placeId, thumb, authorId, authorName, createdAt: serverTimestamp() });
+  // bytes : taille des deux documents, pour la jauge « Place disponible » des Réglages.
+  batch.set(ref, { placeId, thumb, authorId, authorName, bytes: thumb.length + full.length, createdAt: serverTimestamp() });
   if (setCover) batch.update(doc(col(id, "places"), placeId), { coverId: ref.id, cover: thumb, updatedAt: serverTimestamp() });
   await batch.commit();
   return ref.id;
@@ -313,3 +316,150 @@ export async function deletePhoto(id, placeId, photoId, nextCover) {
 export function setCover(id, placeId, photo) {
   return updateDoc(doc(col(id, "places"), placeId), { coverId: photo.id, cover: photo.thumb, updatedAt: serverTimestamp() });
 }
+
+/* ---------- Album : photos de famille ----------
+   albums/{albumId}        : « stay_<idSéjour> » (un album par séjour, créé à la première utilisation)
+                             ou « souvenirs » (Souvenirs d'autrefois). Titre, couverture, compteurs.
+   albumEvents/{id}        : événement dans un album (titre, date, couverture, compteur).
+   albumPhotos/{id}        : miniature + infos (auteur, dates, légende, événement).
+   albumPhotoFull/{id}     : photo complète, chargée seulement à l'ouverture. */
+export function subscribeAlbums(id, onAlbums, onError) {
+  return onSnapshot(col(id, "albums"), (qs) => onAlbums(qs.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => onError && onError(e));
+}
+export function subscribeAlbumContent(id, albumId, { onEvents, onPhotos, onError }) {
+  const err = (e) => onError && onError(e);
+  const u1 = onSnapshot(query(col(id, "albumEvents"), where("albumId", "==", albumId)), (qs) => onEvents(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err);
+  const u2 = onSnapshot(query(col(id, "albumPhotos"), where("albumId", "==", albumId)), (qs) => onPhotos(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err);
+  return () => { u1(); u2(); };
+}
+export async function getAlbum(id, albumId) {
+  const s = await getDoc(doc(col(id, "albums"), albumId));
+  return s.exists() ? { id: s.id, ...s.data() } : null;
+}
+export async function getAlbumThumb(id, photoId) {
+  const s = await getDoc(doc(col(id, "albumPhotos"), photoId));
+  return s.exists() ? s.data().thumb : null;
+}
+export async function getAlbumFull(id, photoId) {
+  const s = await getDoc(doc(col(id, "albumPhotoFull"), photoId));
+  return s.exists() ? s.data().data : null;
+}
+/** Crée ou complète l'album (fusion). */
+export function saveAlbum(id, albumId, data) {
+  return setDoc(doc(col(id, "albums"), albumId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
+}
+export function addAlbumEvent(id, albumId, albumBase, { title, date, authorId, authorName }) {
+  const ref = doc(col(id, "albumEvents"));
+  const b = writeBatch(getDb());
+  b.set(doc(col(id, "albums"), albumId), { ...albumBase, updatedAt: serverTimestamp() }, { merge: true });
+  b.set(ref, { albumId, title, date, authorId, authorName, count: 0, coverId: null, cover: null, createdAt: serverTimestamp() });
+  return { id: ref.id, done: b.commit() };
+}
+export function updateAlbumEvent(id, eventId, data) { return updateDoc(doc(col(id, "albumEvents"), eventId), data); }
+/** Supprime l'événement ; ses photos reviennent dans l'album du séjour. */
+export async function deleteAlbumEvent(id, eventId, photoIds) {
+  const refs = [...photoIds];
+  for (let i = 0; i < Math.max(1, refs.length); i += 400) {
+    const b = writeBatch(getDb());
+    refs.slice(i, i + 400).forEach(pid => b.update(doc(col(id, "albumPhotos"), pid), { eventId: null }));
+    if (i + 400 >= refs.length) b.delete(doc(col(id, "albumEvents"), eventId));
+    await b.commit();
+  }
+}
+export function addAlbumPhoto(id, p, { albumBase, albumCover, preview, eventCover }) {
+  const ref = doc(col(id, "albumPhotos"));
+  const bytes = p.thumb.length + p.full.length;
+  const b = writeBatch(getDb());
+  b.set(doc(col(id, "albumPhotoFull"), ref.id), { albumId: p.albumId, data: p.full });
+  b.set(ref, { albumId: p.albumId, eventId: p.eventId || null, thumb: p.thumb, authorId: p.authorId, authorName: p.authorName,
+    takenAt: p.takenAt || null, srcSize: p.srcSize || 0, caption: "", bytes, createdAt: serverTimestamp() });
+  const a = { ...albumBase, count: increment(1), bytes: increment(bytes), updatedAt: serverTimestamp() };
+  if (albumCover) Object.assign(a, { coverId: ref.id, cover: p.thumb });
+  if (preview) a.previews = arrayUnion(ref.id);
+  b.set(doc(col(id, "albums"), p.albumId), a, { merge: true });
+  if (p.eventId) {
+    const e = { count: increment(1) };
+    if (eventCover) Object.assign(e, { coverId: ref.id, cover: p.thumb });
+    b.update(doc(col(id, "albumEvents"), p.eventId), e);
+  }
+  return { id: ref.id, done: b.commit() };
+}
+export function updateAlbumPhoto(id, photoId, data) { return updateDoc(doc(col(id, "albumPhotos"), photoId), data); }
+/** Déplace une photo entre le séjour (eventId null) et un événement. */
+export function moveAlbumPhoto(id, photo, toEventId, { fromEventCover, toEventCover }) {
+  const b = writeBatch(getDb());
+  b.update(doc(col(id, "albumPhotos"), photo.id), { eventId: toEventId || null });
+  if (photo.eventId) {
+    const e = { count: increment(-1) };
+    if (fromEventCover !== undefined) Object.assign(e, { coverId: fromEventCover?.id || null, cover: fromEventCover?.thumb || null });
+    b.update(doc(col(id, "albumEvents"), photo.eventId), e);
+  }
+  if (toEventId) {
+    const e = { count: increment(1) };
+    if (toEventCover) Object.assign(e, { coverId: photo.id, cover: photo.thumb });
+    b.update(doc(col(id, "albumEvents"), toEventId), e);
+  }
+  return b.commit();
+}
+export function deleteAlbumPhoto(id, photo, { albumCover, eventCover }) {
+  const b = writeBatch(getDb());
+  b.delete(doc(col(id, "albumPhotos"), photo.id));
+  b.delete(doc(col(id, "albumPhotoFull"), photo.id));
+  const a = { count: increment(-1), bytes: increment(-(photo.bytes || 0)), previews: arrayRemove(photo.id), updatedAt: serverTimestamp() };
+  if (albumCover !== undefined) Object.assign(a, { coverId: albumCover?.id || null, cover: albumCover?.thumb || null });
+  b.update(doc(col(id, "albums"), photo.albumId), a);
+  if (photo.eventId) {
+    const e = { count: increment(-1) };
+    if (eventCover !== undefined) Object.assign(e, { coverId: eventCover?.id || null, cover: eventCover?.thumb || null });
+    b.update(doc(col(id, "albumEvents"), photo.eventId), e);
+  }
+  return b.commit();
+}
+/** Supprime un album entier : photos, événements, album. */
+export async function deleteAlbumAll(id, albumId) {
+  const [ph, ev] = await Promise.all([
+    getDocs(query(col(id, "albumPhotos"), where("albumId", "==", albumId))),
+    getDocs(query(col(id, "albumEvents"), where("albumId", "==", albumId))),
+  ]);
+  const refs = [...ph.docs.flatMap(x => [x.ref, doc(col(id, "albumPhotoFull"), x.id)]), ...ev.docs.map(x => x.ref)];
+  for (let i = 0; i < refs.length; i += 400) {
+    const b = writeBatch(getDb());
+    refs.slice(i, i + 400).forEach(r => b.delete(r));
+    await b.commit();
+  }
+  await deleteDoc(doc(col(id, "albums"), albumId));
+}
+
+/* ---------- Mode administrateur ----------
+   Le code administrateur n'est jamais stocké : seule son empreinte (PBKDF2) est dans Firestore. */
+export async function deriveAdminHash(id, code) {
+  const enc = new TextEncoder();
+  const key = await crypto.subtle.importKey("raw", enc.encode(normalizeCode(code)), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits({ name: "PBKDF2", hash: "SHA-256", salt: enc.encode("maison-hazparne/admin/" + id), iterations: 150000 }, key, 256);
+  return [...new Uint8Array(bits)].map(b => b.toString(16).padStart(2, "0")).join("");
+}
+export async function getAdminHash(id) {
+  const s = await getDoc(doc(col(id, "settings"), "admin"));
+  return s.exists() ? s.data().hash : null;
+}
+export function setAdminHash(id, hash) {
+  return setDoc(doc(col(id, "settings"), "admin"), { hash, updatedAt: serverTimestamp() });
+}
+
+/* ---------- Place utilisée par les photos (Album + Restos & bars) ---------- */
+// Requêtes d'agrégation : quelques lectures seulement, quel que soit le nombre de photos.
+export async function photoUsage(id) {
+  const [a, p, pb] = await Promise.all([
+    getAggregateFromServer(col(id, "albumPhotos"), { n: count(), b: sum("bytes") }),
+    getAggregateFromServer(col(id, "placePhotos"), { n: count(), b: sum("bytes") }),
+    getAggregateFromServer(query(col(id, "placePhotos"), where("bytes", ">", 0)), { n: count() }),
+  ]);
+  const n = a.data().n + p.data().n;
+  let bytes = (a.data().b || 0) + (p.data().b || 0);
+  const known = a.data().n + pb.data().n;
+  // Anciennes photos des Restos & bars sans taille enregistrée : on compte la moyenne des autres.
+  const avg = known ? bytes / known : 230000;
+  bytes += (n - known) * avg;
+  return { count: n, bytes };
+}
+

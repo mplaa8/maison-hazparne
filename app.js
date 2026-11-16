@@ -1,8 +1,9 @@
 import * as store from "./store.js";
 import { initAgenda, renderAgenda, setAgendaDates } from "./agenda.js";
 import { initMemo, renderMemo, startMemo, stopMemo, openNotesCount } from "./memo.js";
-import { initPlaces, renderPlaces, stopPlaces } from "./places.js";
+import { initPlaces, renderPlaces, stopPlaces, agendaMode } from "./places.js";
 import { applySeason } from "./saisons.js";
+import { initAlbum, renderAlbum, stopAlbum, beforeStayDelete, renderSettingsExtras } from "./album.js";
 
 /* ---------- Constantes & utilitaires ---------- */
 // Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
@@ -222,6 +223,7 @@ function kickOut(msg) {
   if (state.unsub) { state.unsub(); state.unsub = null; }
   stopMemo();
   stopPlaces();
+  stopAlbum();
   lsSet(LS_SPACE, null);
   state.spaceId = null; state.members = []; state.stays = [];
   closeSheet();
@@ -269,11 +271,12 @@ function setTab(tab) {
   $("#settings-btn").classList.toggle("active", tab === "settings");
   $("#screen-app").classList.toggle("on-home", tab === "home");
   if (tab === "home") renderHome();
+  if (tab === "settings") renderSettingsExtras();
   $("#year-row").hidden = !(tab === "calendar" || tab === "stays");
   if (tab !== "calendar") cancelSelection();
   window.scrollTo(0, 0);
   if (tab === "calendar") requestAnimationFrame(() => scrollToMonth());
-  if (tab === "agenda") { renderAgenda(); renderPlaces(); }
+  if (tab === "agenda") { renderAgenda(); renderPlaces(); renderAlbum(); }
   if (tab === "memo") renderMemo();
 }
 document.querySelectorAll(".tabbtn").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
@@ -319,7 +322,7 @@ function renderAll() {
   renderStays();
   renderMembers();
   renderHome();
-  if (state.tab === "agenda") { renderAgenda(); renderPlaces(); }
+  if (state.tab === "agenda") { renderAgenda(); renderPlaces(); renderAlbum(); }
   if (state.tab === "memo") renderMemo();
   if (!$("#screen-whoami").hidden) renderWhoami();
 }
@@ -706,6 +709,8 @@ function openStayEditor(stay) {
       const name = memberById(stay.memberId)?.name || "cette personne";
       const ok = await confirmBox("Supprimer ce séjour ?", `Séjour de ${name}, ${rangeText(stay.start, stay.end)}. Cette action est définitive.`);
       if (!ok) return;
+      // Album : s'il y a des photos, on demande s'il faut les garder.
+      if (!(await beforeStayDelete(stay))) return;
       store.deleteStay(state.spaceId, stay.id).catch(ex => { console.error(ex); toast("Erreur de suppression."); });
       toast("Séjour supprimé");
     };
@@ -886,7 +891,8 @@ initMemo({
 
 /* ---------- Agenda ---------- */
 initAgenda({ state, memberById, me, todayStr, withText });
-initPlaces({ state, me, memberById, toast, openSheet, closeSheet, confirmBox, showWhoami, renderAgenda });
+initPlaces({ state, me, memberById, toast, openSheet, closeSheet, confirmBox, showWhoami, renderAgenda, renderAlbum });
+initAlbum({ state, me, memberById, todayStr, toast, openSheet, closeSheet, confirmBox, showWhoami, agendaMode });
 // Lien direct possible : …/#agenda=2027-07-12_2027-07-20
 {
   const m = location.hash.match(/^#agenda=(\d{4}-\d{2}-\d{2})_(\d{4}-\d{2}-\d{2})$/);

@@ -5,7 +5,7 @@
 // - VERSION change à chaque publication : la nouvelle version s'installe en arrière-plan et l'app
 //   propose « Mettre à jour » (pas de rechargement automatique).
 // Les données du planning ne passent pas par ici : c'est le cache persistant de Firestore qui les garde.
-const VERSION = "2026-11-15-0802";
+const VERSION = "2026-11-16-1731";
 const APP_CACHE = "mh-app-" + VERSION;
 const RUNTIME_CACHE = "mh-runtime-v1"; // polices, SDK, images de l'Agenda, données : gardé d'une version à l'autre
 
@@ -15,7 +15,7 @@ const FIREBASE = [
   "https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js",
 ];
 const SHELL = [
-  "./", "index.html", "style.css", "app.js", "store.js", "agenda.js", "memo.js", "places.js", "saisons.js", "config.js", "manifest.webmanifest",
+  "./", "index.html", "style.css", "app.js", "store.js", "agenda.js", "memo.js", "places.js", "saisons.js", "album.js", "config.js", "manifest.webmanifest",
   "icons/icon.svg?v=2", "icons/favicon-32.png?v=2", "icons/icon-192.png?v=2", "icons/apple-touch-icon.png?v=2",
   "icons/icon-192.png", "icons/icon-512.png", "icons/icon-maskable-512.png", "icons/apple-touch-icon.png", "icons/icon.svg",
   "images/maison.webp", "images/maison.jpg", "images/maison-nuit.webp", "images/maison-nuit.jpg",

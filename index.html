@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8">
-  <meta name="app-version" content="2026-11-15-0802">
+  <meta name="app-version" content="2026-11-16-1731">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Maison Hazparne</title>
   <meta name="description" content="Planning partagé de la maison de famille à Hazparne">
@@ -145,6 +145,7 @@
         <div class="segmented ag-mode" id="ag-mode" role="group" aria-label="Choisir la rubrique">
           <button type="button" class="active" data-mode="events" aria-pressed="true">Événements</button>
           <button type="button" data-mode="places" aria-pressed="false">Restos &amp; bars</button>
+          <button type="button" data-mode="album" aria-pressed="false">Album</button>
         </div>
         <div id="ag-events">
         <p class="muted agenda-intro">Fêtes, festivals et sorties autour de la maison pendant un séjour.</p>
@@ -162,6 +163,7 @@
         <div id="ag-list"></div>
         </div>
         <div id="places-root" hidden></div>
+        <div id="album-root" hidden></div>
       </section>
 
       <section id="tab-memo" class="tab" hidden>
@@ -196,6 +198,12 @@
           <p id="code-error" class="error" hidden></p>
           <button class="btn btn-primary btn-block" type="submit">Changer le code</button>
         </form>
+        <div class="card" id="settings-album">
+          <div class="label">Photos : place disponible</div>
+          <div id="photo-usage"></div>
+          <div class="label admin-label">Administrateur</div>
+          <div id="admin-state"></div>
+        </div>
         <div class="card">
           <div class="label">Ajouter à l'écran d'accueil</div>
           <p class="small"><strong>iPhone (Safari)</strong> : touchez le bouton Partager <span aria-hidden="true">(carré avec une flèche)</span>, puis « Sur l'écran d'accueil ».<br>

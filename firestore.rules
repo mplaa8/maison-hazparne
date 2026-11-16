@@ -65,7 +65,7 @@ service cloud.firestore {
       match /placePhotos/{photoId} {
         allow read: if spaceExists();
         allow create: if spaceExists()
-          && request.resource.data.keys().hasOnly(['placeId', 'thumb', 'authorId', 'authorName', 'createdAt'])
+          && request.resource.data.keys().hasOnly(['placeId', 'thumb', 'authorId', 'authorName', 'bytes', 'createdAt'])
           && request.resource.data.placeId is string && request.resource.data.placeId.size() <= 64
           && request.resource.data.thumb is string && request.resource.data.thumb.size() <= 36000
           && request.resource.data.thumb.matches('^data:image/(webp|jpeg);base64,.*');
@@ -83,6 +83,50 @@ service cloud.firestore {
           && request.resource.data.data.matches('^data:image/(webp|jpeg);base64,.*');
         allow update: if false;
         allow delete: if true;
+      }
+
+      // Album : un album par séjour (« stay_… ») et « souvenirs » ; titre, couverture, compteurs.
+      match /albums/{albumId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validAlbum(albumId, request.resource.data);
+        allow delete: if true;
+      }
+
+      // Album : événements dans un album
+      match /albumEvents/{eventId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && validAlbumEvent(request.resource.data);
+        allow delete: if true;
+      }
+
+      // Album : miniature d'une photo (≈ 25 Ko) ; seuls la légende et l'événement se modifient.
+      match /albumPhotos/{photoId} {
+        allow read: if spaceExists();
+        allow create: if spaceExists() && validAlbumPhoto(request.resource.data);
+        allow update: if spaceExists() && validAlbumPhoto(request.resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['caption', 'eventId']);
+        allow delete: if true;
+      }
+
+      // Album : photo complète (≈ 200 Ko), chargée seulement à l'ouverture.
+      match /albumPhotoFull/{photoId} {
+        allow read: if spaceExists();
+        allow create: if spaceExists()
+          && request.resource.data.keys().hasOnly(['albumId', 'data'])
+          && request.resource.data.albumId is string && request.resource.data.albumId.size() <= 80
+          && request.resource.data.data is string && request.resource.data.data.size() <= 280000
+          && request.resource.data.data.matches('^data:image/(webp|jpeg);base64,.*');
+        allow update: if false;
+        allow delete: if true;
+      }
+
+      // Réglages partagés : empreinte du code administrateur (jamais le code lui-même).
+      match /settings/{docId} {
+        allow read: if spaceExists();
+        allow create, update: if spaceExists() && docId == 'admin'
+          && request.resource.data.keys().hasOnly(['hash', 'updatedAt'])
+          && request.resource.data.hash is string && request.resource.data.hash.size() == 64;
+        allow delete: if false;
       }
 
       // Mémo : points d'attention
@@ -140,6 +184,39 @@ service cloud.firestore {
         && optString(d.get('geo', null), 10)
         && optString(d.get('authorId', null), 64) && optString(d.get('authorName', null), 40)
         && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000);
+    }
+
+    function validAlbum(albumId, d) {
+      return d.keys().hasOnly(['kind', 'stayId', 'autoTitle', 'title', 'start', 'end', 'year', 'deleted',
+                               'coverId', 'cover', 'previews', 'count', 'bytes', 'updatedAt'])
+        && ((albumId == 'souvenirs' && d.kind == 'souvenirs') || (albumId.matches('^stay_.+') && d.kind == 'stay'))
+        && optString(d.get('stayId', null), 64) && optString(d.get('autoTitle', null), 120) && optString(d.get('title', null), 80)
+        && optString(d.get('start', null), 10) && optString(d.get('end', null), 10) && optString(d.get('year', null), 4)
+        && (!('deleted' in d) || d.deleted is bool)
+        && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000)
+        && (!('previews' in d) || (d.previews is list && d.previews.size() <= 12))
+        && optNumber(d.get('count', null)) && optNumber(d.get('bytes', null));
+    }
+
+    function validAlbumEvent(d) {
+      return d.keys().hasOnly(['albumId', 'title', 'date', 'authorId', 'authorName', 'count', 'coverId', 'cover', 'createdAt'])
+        && d.albumId is string && d.albumId.size() <= 80
+        && d.title is string && d.title.size() > 0 && d.title.size() <= 80
+        && optString(d.get('date', null), 10)
+        && optString(d.get('authorId', null), 64) && optString(d.get('authorName', null), 40)
+        && optNumber(d.get('count', null))
+        && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000);
+    }
+
+    function validAlbumPhoto(d) {
+      return d.keys().hasOnly(['albumId', 'eventId', 'thumb', 'authorId', 'authorName', 'takenAt', 'srcSize', 'caption', 'bytes', 'createdAt'])
+        && d.albumId is string && d.albumId.size() <= 80
+        && optString(d.get('eventId', null), 64)
+        && d.thumb is string && d.thumb.size() <= 36000 && d.thumb.matches('^data:image/(webp|jpeg);base64,.*')
+        && optString(d.get('authorId', null), 64) && optString(d.get('authorName', null), 40)
+        && optString(d.get('takenAt', null), 25)
+        && optNumber(d.get('srcSize', null)) && optNumber(d.get('bytes', null))
+        && d.caption is string && d.caption.size() <= 200;
     }
 
     function validRating(d) {

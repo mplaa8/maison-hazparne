@@ -773,3 +773,54 @@ span.pv-chip { border-color: transparent; background: rgba(255,255,255,.12); cur
 @keyframes saison-in { from { opacity: 0; } to { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .saison:not([hidden]) { animation: none; } }
 
+
+/* ---------- Agenda › Album ---------- */
+.al-years { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 14px; }
+.al-years > :not(.al-year) { grid-column: 1 / -1; }
+.al-year, .al-album, .al-event {
+  display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 0; border: 0; background: transparent;
+  text-align: left; color: var(--text); font: inherit; cursor: pointer;
+}
+.al-year:active, .al-album:active, .al-event:active { transform: scale(.98); }
+.al-mosaic {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 2px; aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2); margin-bottom: 8px;
+}
+.al-tile { display: block; min-width: 0; min-height: 0; background: var(--surface-2); }
+.al-tile img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.al-tile-empty { background: color-mix(in srgb, var(--surface-2) 70%, var(--border)); }
+.al-year-text { display: flex; flex-direction: column; }
+.al-year-title { font-family: var(--font-title); font-size: 21px; font-weight: 600; line-height: 1.15; }
+.al-year-sub, .al-album-sub { font-size: 14px; color: var(--muted); line-height: 1.3; }
+.al-albums, .al-events { display: grid; grid-template-columns: 1fr 1fr; gap: 20px 14px; margin-bottom: 8px; }
+.al-cover {
+  display: flex; align-items: center; justify-content: center; aspect-ratio: 1 / 1;
+  border-radius: var(--radius-sm); overflow: hidden; background: var(--surface-2); margin-bottom: 8px;
+}
+.al-events .al-cover { aspect-ratio: 4 / 3; }
+.al-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.al-event-empty { font-size: 26px; color: var(--faint); }
+.al-album-title { font-weight: 700; font-size: 15.5px; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.al-deleted { font-style: normal; color: var(--danger); font-weight: 600; }
+.al-sub-title { font-size: 15px; font-family: var(--font-text); font-weight: 600; color: var(--muted); margin: 18px 2px 6px; }
+.al-empty-list { list-style: none; margin: 0; padding: 0; }
+.al-empty-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 2px; border-top: 1px solid var(--border); }
+.al-empty-list li > span { display: flex; flex-direction: column; min-width: 0; }
+.al-empty-title { font-weight: 600; color: var(--muted); }
+.al-empty-list .btn { flex: none; white-space: nowrap; font-size: 14px; padding: 8px 12px; }
+.al-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.al-head .icon-btn { margin-top: 2px; }
+.al-intro { margin: 8px 0 0; }
+.al-actions { display: grid; gap: 10px; margin: 16px 0 6px; }
+.al-section { margin-top: 22px; }
+.al-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.al-grid .pl-thumb { border-radius: 6px; }
+.al-move { display: grid; gap: 8px; margin-bottom: 4px; }
+.pv-caption { margin: 0 0 6px; font-size: 16px; color: #fff; }
+/* Réglages */
+.admin-label { margin-top: 20px; }
+.admin-on { font-weight: 600; color: var(--accent-text); margin: 0 0 10px; }
+.usage-text { margin: 0 0 8px; }
+.usage-bar { height: 8px; border-radius: 4px; margin-bottom: 6px; }
+.usage-bar.warn span { background: #d98a2b; }
+.usage-warn { margin: 6px 0 0; font-weight: 600; color: #b8691b; font-size: 15px; }

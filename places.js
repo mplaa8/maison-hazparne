@@ -157,7 +157,7 @@ async function encode(img, [sx, sy, sw, sh], w, h, maxBytes) {
   }
   throw new Error("Photo trop lourde");
 }
-async function compress(file) {
+export async function compress(file) {
   const img = await loadImage(file);
   const W = img.width || img.naturalWidth, H = img.height || img.naturalHeight;
   if (!W || !H) throw new Error("Image illisible");
@@ -218,8 +218,9 @@ function setMode(mode, quiet) {
   document.querySelectorAll("#ag-mode [data-mode]").forEach(b => { b.classList.toggle("active", b.dataset.mode === mode); b.setAttribute("aria-pressed", b.dataset.mode === mode); });
   $("#ag-events").hidden = mode !== "events";
   $("#places-root").hidden = mode !== "places";
+  $("#album-root").hidden = mode !== "album";
   if (quiet) return;
-  if (mode === "places") renderPlaces(); else ctx.renderAgenda();
+  if (mode === "places") renderPlaces(); else if (mode === "album") ctx.renderAlbum(); else ctx.renderAgenda();
 }
 export const agendaMode = () => ui.mode;
 
@@ -620,7 +621,7 @@ async function onClick(e) {
 
 export function initPlaces(context) {
   ctx = context;
-  try { if (localStorage.getItem(LS_MODE) === "places") ui.mode = "places"; } catch { }
+  try { const m = localStorage.getItem(LS_MODE); if (m === "places" || m === "album") ui.mode = m; } catch { }
   document.querySelectorAll("#ag-mode [data-mode]").forEach(b => b.addEventListener("click", () => setMode(b.dataset.mode)));
   setMode(ui.mode, true);
   const root = $("#places-root");
