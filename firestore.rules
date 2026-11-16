@@ -85,26 +85,29 @@ service cloud.firestore {
         allow delete: if true;
       }
 
-      // Album : un album par séjour (« stay_… ») et « souvenirs » ; titre, couverture, compteurs.
-      match /albums/{albumId} {
+      // Album : synthèse d'une année (nombre de photos et d'événements, aperçus).
+      match /albumYears/{year} {
         allow read: if spaceExists();
-        allow create, update: if spaceExists() && validAlbum(albumId, request.resource.data);
+        allow create, update: if spaceExists() && year.matches('^[0-9]{4}$')
+          && request.resource.data.keys().hasOnly(['count', 'events', 'previews', 'updatedAt'])
+          && optNumber(request.resource.data.get('count', null)) && optNumber(request.resource.data.get('events', null))
+          && (!('previews' in request.resource.data) || (request.resource.data.previews is list && request.resource.data.previews.size() <= 12));
         allow delete: if true;
       }
 
-      // Album : événements dans un album
+      // Album : événements (titre, année obligatoire, mois et jour facultatifs)
       match /albumEvents/{eventId} {
         allow read: if spaceExists();
         allow create, update: if spaceExists() && validAlbumEvent(request.resource.data);
         allow delete: if true;
       }
 
-      // Album : miniature d'une photo (≈ 25 Ko) ; seuls la légende et l'événement se modifient.
+      // Album : miniature d'une photo (≈ 25 Ko) ; seuls la légende, l'événement et l'année se modifient.
       match /albumPhotos/{photoId} {
         allow read: if spaceExists();
         allow create: if spaceExists() && validAlbumPhoto(request.resource.data);
         allow update: if spaceExists() && validAlbumPhoto(request.resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['caption', 'eventId']);
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['caption', 'eventId', 'year']);
         allow delete: if true;
       }
 
@@ -112,8 +115,8 @@ service cloud.firestore {
       match /albumPhotoFull/{photoId} {
         allow read: if spaceExists();
         allow create: if spaceExists()
-          && request.resource.data.keys().hasOnly(['albumId', 'data'])
-          && request.resource.data.albumId is string && request.resource.data.albumId.size() <= 80
+          && request.resource.data.keys().hasOnly(['year', 'data'])
+          && request.resource.data.year is string && request.resource.data.year.matches('^[0-9]{4}$')
           && request.resource.data.data is string && request.resource.data.data.size() <= 280000
           && request.resource.data.data.matches('^data:image/(webp|jpeg);base64,.*');
         allow update: if false;
@@ -186,31 +189,23 @@ service cloud.firestore {
         && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000);
     }
 
-    function validAlbum(albumId, d) {
-      return d.keys().hasOnly(['kind', 'stayId', 'autoTitle', 'title', 'start', 'end', 'year', 'deleted',
-                               'coverId', 'cover', 'previews', 'count', 'bytes', 'updatedAt'])
-        && ((albumId == 'souvenirs' && d.kind == 'souvenirs') || (albumId.matches('^stay_.+') && d.kind == 'stay'))
-        && optString(d.get('stayId', null), 64) && optString(d.get('autoTitle', null), 120) && optString(d.get('title', null), 80)
-        && optString(d.get('start', null), 10) && optString(d.get('end', null), 10) && optString(d.get('year', null), 4)
-        && (!('deleted' in d) || d.deleted is bool)
-        && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000)
-        && (!('previews' in d) || (d.previews is list && d.previews.size() <= 12))
-        && optNumber(d.get('count', null)) && optNumber(d.get('bytes', null));
-    }
+    function isYear(y) { return y is string && y.matches('^[0-9]{4}$'); }
 
+    // (« albumId » et « date » : champs de la première version de l'Album, encore acceptés.)
     function validAlbumEvent(d) {
-      return d.keys().hasOnly(['albumId', 'title', 'date', 'authorId', 'authorName', 'count', 'coverId', 'cover', 'createdAt'])
-        && d.albumId is string && d.albumId.size() <= 80
+      return d.keys().hasOnly(['title', 'year', 'month', 'day', 'authorId', 'authorName', 'count', 'coverId', 'cover', 'createdAt', 'albumId', 'date'])
         && d.title is string && d.title.size() > 0 && d.title.size() <= 80
-        && optString(d.get('date', null), 10)
+        && isYear(d.year)
+        && (d.get('month', null) == null || (d.month is int && d.month >= 1 && d.month <= 12))
+        && (d.get('day', null) == null || (d.day is int && d.day >= 1 && d.day <= 31))
         && optString(d.get('authorId', null), 64) && optString(d.get('authorName', null), 40)
         && optNumber(d.get('count', null))
         && optString(d.get('coverId', null), 64) && optString(d.get('cover', null), 36000);
     }
 
     function validAlbumPhoto(d) {
-      return d.keys().hasOnly(['albumId', 'eventId', 'thumb', 'authorId', 'authorName', 'takenAt', 'srcSize', 'caption', 'bytes', 'createdAt'])
-        && d.albumId is string && d.albumId.size() <= 80
+      return d.keys().hasOnly(['year', 'eventId', 'thumb', 'authorId', 'authorName', 'takenAt', 'srcSize', 'caption', 'bytes', 'createdAt', 'albumId'])
+        && isYear(d.year)
         && optString(d.get('eventId', null), 64)
         && d.thumb is string && d.thumb.size() <= 36000 && d.thumb.matches('^data:image/(webp|jpeg);base64,.*')
         && optString(d.get('authorId', null), 64) && optString(d.get('authorName', null), 40)

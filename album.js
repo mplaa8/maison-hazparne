@@ -1,12 +1,11 @@
-// Onglet « Agenda » › « Album » : les photos de famille, rangées en 3 niveaux.
-//   Années › Séjours (un album par séjour du planning, créé automatiquement) › Événements (facultatifs).
-//   + l'album « Souvenirs d'autrefois » pour les photos sans séjour.
+// Onglet « Agenda » › « Album » : les photos de famille, rangées en  Années › Événements › Photos.
+// Aucun lien avec le planning : une année apparaît dès qu'un événement ou une photo la porte.
 // Photos : même méthode gratuite que les Restos & bars (compression dans le navigateur, une photo par
 // document Firestore, miniature à part). Tout est sous le chemin secret du planning, rien dans le dépôt.
 //
-// Droits : tout le monde ajoute ; chacun supprime, déplace ou légende ses propres photos ; seul l'auteur
-// d'un événement le renomme ou le supprime ; le mode administrateur (Réglages) permet tout.
-// Ces droits sont appliqués par l'app (il n'y a pas de comptes) : c'est un garde-fou familial.
+// Droits : tout le monde crée des événements et ajoute des photos ; chacun modifie, déplace ou supprime
+// ses propres photos ; seul l'auteur d'un événement le renomme ou le supprime ; le mode administrateur
+// (Réglages) permet tout. Ces droits sont appliqués par l'app (il n'y a pas de comptes).
 import * as store from "./store.js";
 import { compress } from "./places.js";
 
@@ -14,27 +13,21 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const MONTHS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet", "août", "septembre", "octobre", "novembre", "décembre"];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-const SOUVENIRS = "souvenirs";
-const MAX_PER_PERSON = 30;
+const MAX_PER_PERSON = 30;      // par personne et par événement
+const LOOSE_HINT = 10;          // au-delà, on suggère de créer un événement
 const LS_ADMIN = "mh.admin";
 
 let ctx = null;
-const data = { albums: [], loaded: false, error: false };
-const ui = { view: "years", year: null, albumId: null, eventId: null, upload: null };
-const content = { albumId: null, events: [], photos: [], loaded: false };
-let unsubAlbums = null, unsubContent = null, subSpace = null;
-const thumbs = new Map(); // id → miniature (mosaïques des années)
+const data = { years: [], loaded: false, error: false };
+const ui = { view: "years", year: null, eventId: null, upload: null, newEvent: null };
+const content = { key: null, events: [], photos: [], eventPhotos: [], loaded: false };
+let unsubYears = null, unsubContent = null, subSpace = null, rebuilt = false;
+const thumbs = new Map(); // id → miniature (mosaïques)
 const fulls = new Map();  // id → photo complète (visionneuse)
-let adminHash = undefined; // empreinte du code administrateur (null : pas encore défini)
+let adminHash = undefined;
+const hinted = new Set();  // années pour lesquelles on a déjà suggéré de créer un événement
 
 /* ---------- Utilitaires ---------- */
-const parse = (s) => { const [y, m, d] = s.split("-").map(Number); return new Date(Date.UTC(y, m - 1, d)); };
-const dm = (s) => { const d = parse(s); return `${d.getUTCDate()}${d.getUTCDate() === 1 ? "er" : ""} ${MONTHS[d.getUTCMonth()]}`; };
-function rangeText(a, b) {
-  if (!a) return "";
-  if (!b || a === b) return `le ${dm(a)} ${a.slice(0, 4)}`;
-  return `du ${dm(a)}${a.slice(0, 4) !== b.slice(0, 4) ? " " + a.slice(0, 4) : ""} au ${dm(b)} ${b.slice(0, 4)}`;
-}
 const tsMs = (t) => (t?.toMillis ? t.toMillis() : typeof t === "number" ? t : t?.seconds ? t.seconds * 1000 : Date.now());
 function dayText(ms) { const d = new Date(ms); return `${d.getDate()}${d.getDate() === 1 ? "er" : ""} ${MONTHS[d.getMonth()]} ${d.getFullYear()}`; }
 const photoTime = (p) => (p.takenAt ? Date.parse(p.takenAt) : tsMs(p.createdAt));
@@ -43,45 +36,17 @@ const plural = (n, w) => `${n} ${w}${n > 1 ? "s" : ""}`;
 const fmtN = (n) => n.toLocaleString("fr-FR");
 const fail = (ex) => { console.error(ex); ctx.toast("Erreur d'enregistrement. Réessayez."); };
 const nameOf = (id, fallback) => (id && ctx.memberById(id)?.name) || fallback || "Quelqu'un";
+const thisYear = () => String(new Date().getFullYear());
 export const isAdmin = () => { try { return !!adminHash && localStorage.getItem(LS_ADMIN) === adminHash; } catch { return false; } };
 const mine = (x) => isAdmin() || (!!x.authorId && x.authorId === ctx.me()?.id);
-
-/** Titre automatique : « Juillet 2027 · Caro et Philippe » (personne du séjour + invités de la famille). */
-function autoTitle(stay) {
-  const d = parse(stay.start);
-  const names = [stay.memberId, ...(Array.isArray(stay.guestIds) ? stay.guestIds : [])].map(id => ctx.memberById(id)?.name).filter(Boolean);
-  const who = names.length > 1 ? names.slice(0, -1).join(", ") + " et " + names[names.length - 1] : (names[0] || "");
-  return `${cap(MONTHS[d.getUTCMonth()])} ${d.getUTCFullYear()}${who ? " · " + who : ""}`;
+/** « 25 décembre 2024 », « décembre 2024 » ou « 2024 ». */
+function eventDate(e) {
+  if (e.month && e.day) return `${e.day}${e.day === 1 ? "er" : ""} ${MONTHS[e.month - 1]} ${e.year}`;
+  if (e.month) return `${MONTHS[e.month - 1]} ${e.year}`;
+  return String(e.year);
 }
-const stayAlbumId = (stayId) => "stay_" + stayId;
-
-/** Tous les albums : un par séjour (même sans document), les albums de séjours supprimés, les souvenirs. */
-function allAlbums() {
-  const docs = new Map(data.albums.map(a => [a.id, a]));
-  const today = ctx.todayStr();
-  const out = [];
-  for (const s of ctx.state.stays) {
-    const a = docs.get(stayAlbumId(s.id)) || {};
-    if (s.start > today && !a.count) continue; // séjour à venir sans photo : pas encore d'album
-    out.push({ ...a, id: stayAlbumId(s.id), kind: "stay", stay: s, title: a.title || autoTitle(s), autoTitle: autoTitle(s),
-      start: s.start, end: s.end, year: s.start.slice(0, 4), count: a.count || 0, deleted: false });
-  }
-  for (const a of data.albums) {
-    if (a.kind === "stay" && a.deleted && (a.count || 0) > 0 && !ctx.state.stays.some(s => stayAlbumId(s.id) === a.id)) {
-      out.push({ ...a, title: a.title || a.autoTitle || "Séjour", count: a.count || 0 });
-    }
-  }
-  return out;
-}
-function souvenirs() {
-  const a = data.albums.find(x => x.id === SOUVENIRS) || {};
-  return { ...a, id: SOUVENIRS, kind: "souvenirs", title: "Souvenirs d'autrefois", count: a.count || 0 };
-}
-function albumById(id) { return id === SOUVENIRS ? souvenirs() : allAlbums().find(a => a.id === id) || null; }
-function albumBase(a) {
-  if (a.kind === "souvenirs") return { kind: "souvenirs" };
-  return { kind: "stay", stayId: a.stay?.id || a.stayId || a.id.slice(5), autoTitle: a.autoTitle || a.title, start: a.start, end: a.end, year: a.year };
-}
+const eventSort = (a, b) => (a.month || 13) - (b.month || 13) || (a.day || 32) - (b.day || 32) || tsMs(a.createdAt) - tsMs(b.createdAt);
+const validYear = (y) => /^\d{4}$/.test(String(y)) && Number(y) >= 1850 && Number(y) <= new Date().getFullYear() + 1;
 
 /* ---------- Date de prise de vue (EXIF des JPEG) ---------- */
 async function exifDate(file) {
@@ -117,39 +82,54 @@ async function exifDate(file) {
   return null;
 }
 
+
 /* ---------- Données ---------- */
 function ensureSub() {
   const id = ctx.state.spaceId;
-  if (!id || (unsubAlbums && subSpace === id)) return;
+  if (!id || (unsubYears && subSpace === id)) return;
   stopAlbum();
   subSpace = id;
-  unsubAlbums = store.subscribeAlbums(id, (list) => { data.albums = list; data.loaded = true; data.error = false; update(); },
-    (e) => { console.error(e); data.error = true; update(); });
+  unsubYears = store.subscribeAlbumYears(id, (list) => {
+    data.years = list; data.loaded = true; data.error = false; update();
+    // Synthèses absentes alors qu'il y a des photos (ex. photos de la première version) : on les recalcule.
+    if (!list.length && !rebuilt && navigator.onLine) {
+      rebuilt = true;
+      store.albumCounts(id).then(c => { if (c.photos && !c.years) return store.rebuildAlbumYears(id); }).catch(e => console.error(e));
+    }
+  }, (e) => { console.error(e); data.error = true; update(); });
   store.getAdminHash(id).then(h => { adminHash = h; update(); }).catch(() => { });
 }
 export function stopAlbum() {
-  if (unsubAlbums) { unsubAlbums(); unsubAlbums = null; }
+  if (unsubYears) { unsubYears(); unsubYears = null; }
   closeContent();
-  Object.assign(data, { albums: [], loaded: false, error: false });
-  Object.assign(ui, { view: "years", year: null, albumId: null, eventId: null });
-  thumbs.clear(); fulls.clear(); subSpace = null; adminHash = undefined;
+  Object.assign(data, { years: [], loaded: false, error: false });
+  Object.assign(ui, { view: "years", year: null, eventId: null });
+  thumbs.clear(); fulls.clear(); subSpace = null; adminHash = undefined; rebuilt = false;
 }
 function closeContent() {
   if (unsubContent) { unsubContent(); unsubContent = null; }
-  Object.assign(content, { albumId: null, events: [], photos: [], loaded: false });
+  Object.assign(content, { key: null, events: [], photos: [], eventPhotos: [], loaded: false, hadItems: false });
 }
-function openContent(albumId) {
-  if (content.albumId === albumId) return;
+/** Écoute le contenu de l'année affichée (événements + autres photos) et, le cas échéant, de l'événement. */
+function openContent(year, eventId) {
+  const key = `${year}|${eventId || ""}`;
+  if (content.key === key) return;
   closeContent();
-  content.albumId = albumId;
-  unsubContent = store.subscribeAlbumContent(ctx.state.spaceId, albumId, {
+  content.key = key;
+  const sid = ctx.state.spaceId;
+  const subs = [store.subscribeYear(sid, year, {
     onEvents: (e) => { content.events = e; update(); },
-    onPhotos: (p) => { content.photos = p; content.loaded = true; p.forEach(x => thumbs.set(x.id, x.thumb)); update(); if (viewer.open) renderViewer(); },
+    onPhotos: (p) => { content.photos = p; if (!eventId) content.loaded = true; p.forEach(x => thumbs.set(x.id, x.thumb)); update(); if (viewer.open) renderViewer(); },
     onError: (e) => { console.error(e); content.loaded = true; update(); },
-  });
+  })];
+  if (eventId) subs.push(store.subscribeEventPhotos(sid, eventId, (p) => {
+    content.eventPhotos = p; content.loaded = true; p.forEach(x => thumbs.set(x.id, x.thumb)); update(); if (viewer.open) renderViewer();
+  }, (e) => { console.error(e); content.loaded = true; update(); }));
+  unsubContent = () => subs.forEach(u => u());
 }
 const visible = () => ctx.state.tab === "agenda" && ctx.agendaMode() === "album";
 function update() { if (visible()) renderAlbum(); }
+const yearsList = () => data.years.filter(y => (y.count || 0) > 0 || (y.events || 0) > 0).sort((a, b) => b.id.localeCompare(a.id));
 
 /* ---------- Rendu ---------- */
 export function renderAlbum() {
@@ -161,78 +141,69 @@ export function renderAlbum() {
       <p class="small muted">Les règles de sécurité Firestore doivent être mises à jour, puis l'app rouverte.</p></div>`;
     return;
   }
-  if (ui.view === "event" || ui.view === "album") {
-    const a = albumById(ui.albumId);
-    if (!a) { Object.assign(ui, { view: ui.year ? "year" : "years", albumId: null, eventId: null }); closeContent(); }
-    else {
-      openContent(a.id);
-      if (ui.view === "event") {
-        const ev = content.events.find(e => e.id === ui.eventId);
-        if (ev) { ui.newEvent = null; root.innerHTML = eventHtml(a, ev); return; }
-        // Événement tout juste créé : on attend qu'il arrive de Firestore.
-        if (content.loaded && ui.newEvent !== ui.eventId) ui.view = "album"; else { root.innerHTML = `<p class="small muted">Chargement…</p>`; return; }
-      }
-      root.innerHTML = albumHtml(a); return;
-    }
+  if (ui.view === "event") {
+    openContent(ui.year, ui.eventId);
+    const ev = content.events.find(e => e.id === ui.eventId);
+    if (ev) { ui.newEvent = null; root.innerHTML = eventHtml(ev); return; }
+    if (!content.loaded || ui.newEvent === ui.eventId) { root.innerHTML = `<p class="small muted">Chargement…</p>`; return; }
+    ui.view = "year"; ui.eventId = null;
+  }
+  if (ui.view === "year") {
+    openContent(ui.year, null);
+    const y = data.years.find(x => x.id === ui.year);
+    if (content.events.length || content.photos.length) content.hadItems = true;
+    // Année vidée (dernier événement ou dernière photo supprimés ou déplacés) : retour à la liste.
+    if (content.hadItems && !ui.upload && content.loaded && !content.events.length && !content.photos.length && !(y && (y.count || y.events))) { ui.view = "years"; ui.year = null; }
+    else { root.innerHTML = yearHtml(ui.year); return; }
   }
   closeContent();
-  root.innerHTML = ui.view === "year" ? yearHtml(ui.year) : yearsHtml();
+  root.innerHTML = yearsHtml();
 }
 
-function mosaic(ids, label) {
-  const cells = [0, 1, 2, 3].map(i => {
+function mosaic(ids) {
+  return `<span class="al-mosaic" aria-hidden="true">${[0, 1, 2, 3].map(i => {
     const id = ids[i], t = id && thumbs.get(id);
     if (id && !thumbs.has(id)) loadThumb(id);
     return t ? `<span class="al-tile"><img src="${esc(t)}" alt="" loading="lazy"></span>` : `<span class="al-tile al-tile-empty"></span>`;
-  }).join("");
-  return `<span class="al-mosaic" aria-hidden="true">${cells}</span>${label || ""}`;
+  }).join("")}</span>`;
 }
 function loadThumb(id) {
   thumbs.set(id, null);
-  store.getAlbumThumb(ctx.state.spaceId, id).then(t => { if (t) { thumbs.set(id, t); update(); } }).catch(() => thumbs.delete(id));
+  store.getAlbumThumb(ctx.state.spaceId, id).then(t => { if (t) { thumbs.set(id, t); update(); } else thumbs.delete(id); }).catch(() => thumbs.delete(id));
 }
-/** Jusqu'à 4 photos pour la mosaïque : couvertures d'abord, puis les premières photos des albums. */
-function mosaicIds(albums) {
-  const ids = [];
-  const sorted = [...albums].sort((a, b) => (b.count || 0) - (a.count || 0));
-  for (const a of sorted) if (a.coverId) { ids.push(a.coverId); if (a.cover) thumbs.set(a.coverId, a.cover); }
-  for (const a of sorted) for (const p of (a.previews || [])) if (!ids.includes(p)) ids.push(p);
-  return ids.slice(0, 4);
+const sampled = new Set();
+function mosaicIds(y) {
+  const ids = (y.previews || []).slice(0, 4);
+  // Aperçus incomplets (photos supprimées) : on complète une fois avec quelques photos de l'année.
+  if (ids.length < Math.min(4, y.count || 0) && !sampled.has(y.id)) {
+    sampled.add(y.id);
+    store.yearSample(ctx.state.spaceId, y.id).then(list => {
+      list.forEach(p => thumbs.set(p.id, p.thumb));
+      y.previews = [...new Set([...(y.previews || []), ...list.map(p => p.id)])]; update();
+    }).catch(() => { });
+  }
+  return ids;
+}
+function topButtons(opts = {}) {
+  const add = !navigator.onLine ? `<button class="btn btn-block pl-photo-btn" disabled>Connexion nécessaire pour envoyer des photos</button>`
+    : `<button class="btn btn-primary btn-block al-add" data-act="pick" ${ui.upload ? "disabled" : ""}>📷 Ajouter des photos</button>`;
+  return `<div class="al-actions">${add}${opts.noEvent ? "" : `<button class="btn btn-block" data-act="new-event">+ Créer un événement</button>`}</div>`;
+}
+function uploadBar() {
+  const up = ui.upload;
+  return up ? `<div class="pl-upload" role="status"><div class="progress"><span style="width:${Math.round(up.done / up.steps * 100)}%"></span></div><span class="progress-label">${esc(up.label)}</span></div>` : "";
 }
 
 function yearsHtml() {
-  const albums = allAlbums();
-  const years = [...new Set(albums.map(a => a.year))].sort((a, b) => b.localeCompare(a));
-  const sv = souvenirs();
-  const card = (key, title, sub, ids) => `
-    <button class="al-year" data-act="${key === SOUVENIRS ? "open-album" : "open-year"}" data-id="${esc(key)}">
-      ${mosaic(ids)}
-      <span class="al-year-text"><span class="al-year-title">${esc(title)}</span><span class="al-year-sub">${esc(sub)}</span></span>
-    </button>`;
-  return `<div class="al-years">
-    ${card(SOUVENIRS, sv.title, sv.count ? plural(sv.count, "photo") : "Photos scannées et vieux albums", mosaicIds([sv]))}
-    ${!data.loaded ? `<p class="small muted">Chargement…</p>` : years.length ? years.map(y => {
-      const list = albums.filter(a => a.year === y), n = list.reduce((s, a) => s + (a.count || 0), 0);
-      return card(y, y, `${plural(n, "photo")} · ${plural(list.length, "séjour")}`, mosaicIds(list));
-    }).join("") : `<div class="ev-empty"><div class="ev-empty-emoji" aria-hidden="true">📷</div><p><strong>Pas encore d'album.</strong></p><p class="muted">Chaque séjour du planning devient un album dès son arrivée.</p></div>`}</div>`;
-}
-
-function yearHtml(y) {
-  const list = allAlbums().filter(a => a.year === y).sort((a, b) => b.start.localeCompare(a.start));
-  const full = list.filter(a => a.count > 0), empty = list.filter(a => !a.count);
-  return `
-    <button class="link-btn pl-back" data-act="back-years">‹ Toutes les années</button>
-    <h2 class="pl-title">${esc(y)}</h2>
-    ${full.length ? `<div class="al-albums">${full.map(a => `
-      <button class="al-album" data-act="open-album" data-id="${esc(a.id)}">
-        <span class="al-cover">${a.cover ? `<img src="${esc(a.cover)}" alt="" loading="lazy">` : ""}</span>
-        <span class="al-album-title">${esc(a.title)}</span>
-        <span class="al-album-sub">${esc(rangeText(a.start, a.end))} · ${plural(a.count, "photo")}${a.deleted ? ` · <em class="al-deleted">séjour supprimé</em>` : ""}</span>
-      </button>`).join("")}</div>` : ""}
-    ${empty.length ? `<h3 class="al-sub-title">${full.length ? "Séjours sans photo" : "Séjours"}</h3>
-      <ul class="al-empty-list">${empty.map(a => `
-        <li><span><span class="al-empty-title">${esc(a.title)}</span><span class="small muted">${esc(rangeText(a.start, a.end))}</span></span>
-        <button class="btn btn-small" data-act="first-photos" data-id="${esc(a.id)}">Ajouter les premières photos</button></li>`).join("")}</ul>` : ""}`;
+  const list = yearsList();
+  return `${topButtons()}${uploadBar()}
+    ${!data.loaded ? `<p class="small muted">Chargement…</p>` : list.length ? `<div class="al-years">${list.map(y => `
+      <button class="al-year" data-act="open-year" data-id="${esc(y.id)}">
+        ${mosaic(mosaicIds(y))}
+        <span class="al-year-text"><span class="al-year-title">${esc(y.id)}</span>
+          <span class="al-year-sub">${plural(y.count || 0, "photo")}${y.events ? ` · ${plural(y.events, "événement")}` : ""}</span></span>
+      </button>`).join("")}</div>`
+      : `<div class="ev-empty"><div class="ev-empty-emoji" aria-hidden="true">📷</div><p><strong>Aucune photo pour l'instant.</strong></p><p class="muted">Créez un premier événement ou ajoutez vos photos.</p></div>`}`;
 }
 
 function grid(photos) {
@@ -241,169 +212,237 @@ function grid(photos) {
       <img src="${esc(p.thumb)}" alt="" loading="lazy" decoding="async">
     </button>`).join("")}</div>`;
 }
-function uploadBar() {
-  const up = ui.upload;
-  if (!up || up.albumId !== ui.albumId || (up.eventId || null) !== (ui.view === "event" ? ui.eventId : null)) return "";
-  return `<div class="pl-upload" role="status"><div class="progress"><span style="width:${Math.round(up.done / up.steps * 100)}%"></span></div><span class="progress-label">${esc(up.label)}</span></div>`;
-}
-function addButton(label = "📷 Ajouter des photos") {
-  if (!navigator.onLine) return `<button class="btn btn-block pl-photo-btn" disabled>Connexion nécessaire pour envoyer des photos</button>`;
-  return `<button class="btn btn-primary btn-block al-add" data-act="pick" ${ui.upload ? "disabled" : ""}>${label}</button>`;
-}
 
-function albumHtml(a) {
-  const isStay = a.kind === "stay";
-  const evs = [...content.events].sort((x, y) => (x.date || "").localeCompare(y.date || "") || tsMs(x.createdAt) - tsMs(y.createdAt));
-  const loose = content.photos.filter(p => !p.eventId || !evs.some(e => e.id === p.eventId)).sort(byTime);
-  const evCover = (e) => e.cover || content.photos.filter(p => p.eventId === e.id).sort(byTime)[0]?.thumb || null;
+function yearHtml(y) {
+  const evs = [...content.events].sort(eventSort);
+  const loose = [...content.photos].sort(byTime);
   return `
-    <button class="link-btn pl-back" data-act="${isStay ? "back-year" : "back-years"}">‹ ${isStay ? esc(a.year) : "Toutes les années"}</button>
-    <div class="al-head">
-      <h2 class="pl-title">${esc(a.title)}</h2>
-      <button class="icon-btn small-icon" data-act="rename-album" aria-label="Modifier le titre">✎</button>
-    </div>
-    <p class="pl-detail-sub">${isStay ? esc(rangeText(a.start, a.end)) + " · " : ""}${plural(content.loaded ? content.photos.length : a.count, "photo")}${a.deleted ? ` · <em class="al-deleted">séjour supprimé</em>` : ""}</p>
-    ${!isStay ? `<p class="small muted al-intro">Pour les photos qui ne correspondent à aucun séjour : photos scannées, vieux albums…</p>` : ""}
-    <div class="al-actions">${addButton()}<button class="btn btn-block" data-act="new-event">+ Créer un événement</button></div>
-    ${uploadBar()}
-    ${evs.length ? `<h3 class="memo-title al-section">Événements</h3><div class="al-events">${evs.map(e => {
-      const c = evCover(e);
-      return `<button class="al-event" data-act="open-event" data-id="${esc(e.id)}">
-        <span class="al-cover">${c ? `<img src="${esc(c)}" alt="" loading="lazy">` : `<span class="al-event-empty" aria-hidden="true">✦</span>`}</span>
+    <button class="link-btn pl-back" data-act="back-years">‹ Toutes les années</button>
+    <h2 class="pl-title">${esc(y)}</h2>
+    ${topButtons()}${uploadBar()}
+    ${evs.length ? `<h3 class="memo-title al-section">Événements</h3><div class="al-events">${evs.map(e => `
+      <button class="al-event" data-act="open-event" data-id="${esc(e.id)}">
+        <span class="al-cover">${e.cover ? `<img src="${esc(e.cover)}" alt="" loading="lazy">` : `<span class="al-event-empty" aria-hidden="true">✦</span>`}</span>
         <span class="al-album-title">${esc(e.title)}</span>
-        <span class="al-album-sub">${e.date ? esc(dm(e.date)) + " · " : ""}${plural(content.photos.filter(p => p.eventId === e.id).length, "photo")}</span>
-      </button>`;
-    }).join("")}</div>` : ""}
-    <h3 class="memo-title al-section">${evs.length ? (isStay ? "Autres photos du séjour" : "Autres photos") : "Photos"}${loose.length ? ` <span class="muted pl-count">${loose.length}</span>` : ""}</h3>
-    ${!content.loaded ? `<p class="small muted">Chargement…</p>` : loose.length ? grid(loose) : `<p class="small muted memo-empty">${evs.length ? "Toutes les photos sont rangées dans les événements." : "Pas encore de photo."}</p>`}`;
+        <span class="al-album-sub">${esc(eventDate(e))} · ${plural(e.count || 0, "photo")}</span>
+      </button>`).join("")}</div>` : ""}
+    ${loose.length || !evs.length ? `<h3 class="memo-title al-section">${evs.length ? `Autres photos de ${esc(y)}` : "Photos"}${loose.length ? ` <span class="muted pl-count">${loose.length}</span>` : ""}</h3>
+      ${!content.loaded ? `<p class="small muted">Chargement…</p>` : loose.length ? grid(loose) : `<p class="small muted memo-empty">Pas encore de photo.</p>`}` : ""}`;
 }
 
-function eventHtml(a, e) {
-  const photos = content.photos.filter(p => p.eventId === e.id).sort(byTime);
+function eventHtml(e) {
+  const photos = [...content.eventPhotos].sort(byTime);
   return `
-    <button class="link-btn pl-back" data-act="back-album">‹ ${esc(a.title)}</button>
+    <button class="link-btn pl-back" data-act="back-year">‹ ${esc(e.year)}</button>
     <h2 class="pl-title">${esc(e.title)}</h2>
-    <p class="pl-detail-sub">${e.date ? esc(dm(e.date)) + " " + e.date.slice(0, 4) + " · " : ""}${plural(photos.length, "photo")} · créé par ${esc(nameOf(e.authorId, e.authorName))}</p>
-    <div class="al-actions">${addButton()}</div>
-    ${uploadBar()}
+    <p class="pl-detail-sub">${esc(cap(eventDate(e)))} · ${plural(photos.length, "photo")} · créé par ${esc(nameOf(e.authorId, e.authorName))}</p>
+    ${topButtons({ noEvent: true })}${uploadBar()}
     ${!content.loaded ? `<p class="small muted">Chargement…</p>` : photos.length ? grid(photos) : `<p class="small muted memo-empty">Pas encore de photo dans cet événement.</p>`}
     ${mine(e) ? `<div class="check-footer pl-actions"><button class="link-btn" data-act="edit-event">Modifier l'événement</button><button class="link-btn danger" data-act="delete-event">Supprimer l'événement</button></div>` : ""}`;
 }
 
 /* ---------- Formulaires ---------- */
+function dateFields(prefix, { year, month, day } = {}) {
+  return `
+    <div class="al-date-row">
+      <div><label class="label" for="${prefix}-year">Année</label>
+        <input id="${prefix}-year" inputmode="numeric" maxlength="4" value="${esc(year || "")}" placeholder="AAAA"></div>
+      <div><label class="label" for="${prefix}-month">Mois <span class="muted">(facultatif)</span></label>
+        <select id="${prefix}-month"><option value="">—</option>${MONTHS.map((m, i) => `<option value="${i + 1}" ${month === i + 1 ? "selected" : ""}>${cap(m)}</option>`).join("")}</select></div>
+      <div><label class="label" for="${prefix}-day">Jour</label>
+        <select id="${prefix}-day"><option value="">—</option>${Array.from({ length: 31 }, (_, i) => `<option ${day === i + 1 ? "selected" : ""}>${i + 1}</option>`).join("")}</select></div>
+    </div>`;
+}
+function readDate(prefix) {
+  const year = $(`#${prefix}-year`).value.trim(), month = Number($(`#${prefix}-month`).value) || null;
+  const day = month ? Number($(`#${prefix}-day`).value) || null : null;
+  if (!validYear(year)) return { error: "Indiquez l'année (4 chiffres)." };
+  if (day && day > new Date(Date.UTC(Number(year), month, 0)).getUTCDate()) return { error: "Ce jour n'existe pas dans ce mois." };
+  return { year, month, day };
+}
+function eventSheet(e, presetYear) {
+  ctx.openSheet(`
+    <h3>${e ? "Modifier l'événement" : "Nouvel événement"}</h3>
+    <form id="al-form" autocomplete="off">
+      <label class="label" for="al-title">Titre</label>
+      <input id="al-title" maxlength="80" value="${esc(e?.title || "")}" placeholder="Ex. Premier Noël, Anniversaire de Léa">
+      ${dateFields("ev", e || { year: presetYear || "" })}
+      <p class="error" id="al-error" hidden></p>
+      <div class="btn-row"><button type="button" class="btn" id="al-cancel">Annuler</button><button type="submit" class="btn btn-primary">${e ? "Enregistrer" : "Créer"}</button></div>
+    </form>`);
+  if (!e) setTimeout(() => $("#al-title")?.focus(), 100);
+  $("#al-cancel").onclick = () => { pendingMeta = null; ctx.closeSheet(); };
+  $("#al-form").onsubmit = (ev) => {
+    ev.preventDefault();
+    const err = (m) => { const x = $("#al-error"); x.textContent = m; x.hidden = false; };
+    const title = $("#al-title").value.trim().slice(0, 80);
+    if (!title) return err("Donnez un titre à l'événement.");
+    const d = readDate("ev"); if (d.error) return err(d.error);
+    const sid = ctx.state.spaceId, meM = ctx.me();
+    ctx.closeSheet();
+    if (e) {
+      store.updateAlbumEvent(sid, e, { title, year: d.year, month: d.month, day: d.day }, content.eventPhotos).catch(fail);
+      if (d.year !== e.year) { ui.year = d.year; content.key = null; }
+      return;
+    }
+    const { id, done } = store.addAlbumEvent(sid, { title, ...d, authorId: meM?.id || null, authorName: meM?.name || null });
+    done.catch(fail);
+    Object.assign(ui, { view: "event", year: d.year, eventId: id, newEvent: id }); renderAlbum(); window.scrollTo(0, 0);
+    ctx.toast("Événement créé");
+    // Créé depuis la fenêtre d'ajout : les photos choisies y sont rangées.
+    if (pendingMeta) { const m = pendingMeta; pendingMeta = null; uploadFiles(m, { eventId: id, year: d.year, coverId: null }); }
+  };
+}
 function textSheet(title, label, value, ok, max, onOk) {
   ctx.openSheet(`
     <h3>${esc(title)}</h3>
     <form id="al-form" autocomplete="off">
       <label class="label" for="al-input">${esc(label)}</label>
       <input id="al-input" maxlength="${max}" value="${esc(value || "")}">
-      <p class="error" id="al-error" hidden></p>
       <div class="btn-row"><button type="button" class="btn" id="al-cancel">Annuler</button><button type="submit" class="btn btn-primary">${esc(ok)}</button></div>
     </form>`);
   setTimeout(() => $("#al-input")?.focus(), 100);
   $("#al-cancel").onclick = () => ctx.closeSheet();
   $("#al-form").onsubmit = (ev) => { ev.preventDefault(); onOk($("#al-input").value.trim().slice(0, max)); };
 }
-function eventSheet(a, e) {
-  const isStay = a.kind === "stay";
-  const days = [];
-  if (isStay) for (let d = a.start; d <= a.end && days.length < 400; d = new Date(parse(d).getTime() + 864e5).toISOString().slice(0, 10)) days.push(d);
-  const cur = e?.date || (isStay ? (days.includes(ctx.todayStr()) ? ctx.todayStr() : days[0]) : "");
-  ctx.openSheet(`
-    <h3>${e ? "Modifier l'événement" : "Nouvel événement"}</h3>
-    <form id="al-form" autocomplete="off">
-      <label class="label" for="al-input">Titre</label>
-      <input id="al-input" maxlength="80" value="${esc(e?.title || "")}" placeholder="Ex. Fêtes de Bayonne, Anniversaire de Léa">
-      <label class="label" for="al-date">Date</label>
-      ${isStay ? `<select id="al-date">${days.map(d => `<option value="${d}" ${d === cur ? "selected" : ""}>${esc(cap(new Intl.DateTimeFormat("fr-FR", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" }).format(parse(d))))}</option>`).join("")}</select>`
-        : `<input type="date" id="al-date" value="${esc(cur)}">`}
-      <p class="error" id="al-error" hidden></p>
-      <div class="btn-row"><button type="button" class="btn" id="al-cancel">Annuler</button><button type="submit" class="btn btn-primary">${e ? "Enregistrer" : "Créer"}</button></div>
-    </form>`);
-  if (!e) setTimeout(() => $("#al-input")?.focus(), 100);
-  $("#al-cancel").onclick = () => ctx.closeSheet();
-  $("#al-form").onsubmit = (ev) => {
-    ev.preventDefault();
-    const title = $("#al-input").value.trim().slice(0, 80), date = $("#al-date").value || null;
-    if (!title) { const er = $("#al-error"); er.textContent = "Donnez un titre à l'événement."; er.hidden = false; return; }
-    const sid = ctx.state.spaceId, meM = ctx.me();
-    ctx.closeSheet();
-    if (e) return store.updateAlbumEvent(sid, e.id, { title, date }).catch(fail);
-    const { id, done } = store.addAlbumEvent(sid, a.id, albumBase(a), { title, date, authorId: meM?.id || null, authorName: meM?.name || null });
-    done.catch(fail);
-    Object.assign(ui, { view: "event", eventId: id, newEvent: id }); renderAlbum(); window.scrollTo(0, 0);
-    ctx.toast("Événement créé");
-  };
-}
-function needProfile(what) {
+function needProfile() {
   ctx.openSheet(`
     <h3>Qui êtes-vous ?</h3>
-    <p>Pour ${what}, choisissez d'abord votre profil : vos photos seront enregistrées à votre nom.</p>
+    <p>Pour ajouter des photos, choisissez d'abord votre profil : elles seront enregistrées à votre nom.</p>
     <div class="btn-row"><button class="btn" id="al-no">Annuler</button><button class="btn btn-primary" id="al-who">Choisir mon profil</button></div>`);
   $("#al-no").onclick = () => ctx.closeSheet();
   $("#al-who").onclick = () => { ctx.closeSheet(); ctx.showWhoami(); };
 }
 
+/** Liste des événements pour les choix « Ranger dans » (toutes années). */
+async function allEvents() {
+  try { return (await store.listAlbumEvents(ctx.state.spaceId)).sort((a, b) => b.year.localeCompare(a.year) || eventSort(a, b)); }
+  catch { return content.events; }
+}
+function eventOptions(evs, selected) {
+  const byYear = new Map();
+  evs.forEach(e => { if (!byYear.has(e.year)) byYear.set(e.year, []); byYear.get(e.year).push(e); });
+  return [...byYear].map(([y, list]) => `<optgroup label="${esc(y)}">${list.map(e => `<option value="${esc(e.id)}" ${e.id === selected ? "selected" : ""}>${esc(e.title)} · ${esc(eventDate(e))}</option>`).join("")}</optgroup>`).join("");
+}
+
 /* ---------- Envoi des photos ---------- */
-let pickTarget = null;
-function pick(albumId, eventId) {
-  if (!ctx.me()) return needProfile("ajouter des photos");
+function pick() {
+  if (!ctx.me()) return needProfile();
   if (!navigator.onLine) return ctx.toast("Connexion nécessaire pour envoyer des photos");
-  pickTarget = { albumId, eventId: eventId || null };
   const f = $("#al-files"); f.value = ""; f.click();
 }
-async function uploadFiles(files) {
-  const target = pickTarget; pickTarget = null;
-  const a = target && albumById(target.albumId);
+/** Fenêtre d'ajout : où ranger les photos (événement recommandé, ou seulement une année). */
+async function addSheet(files) {
   files = [...files].filter(f => /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(f.name));
-  if (!a || !files.length || ui.upload) return;
-  const meM = ctx.me(), sid = ctx.state.spaceId;
-  // Les photos déjà dans l'album (pour les doublons et la limite) : on attend leur chargement.
-  if (content.albumId !== a.id) openContent(a.id);
-  for (let i = 0; i < 30 && !content.loaded; i++) await new Promise(r => setTimeout(r, 100));
-  const notes = [];
-  // Doublons : même taille de fichier et même date de prise de vue.
+  if (!files.length) return;
   const meta = await Promise.all(files.map(async f => ({ f, takenAt: await exifDate(f), size: f.size })));
-  const keys = new Set(content.photos.map(p => `${p.srcSize}|${p.takenAt || ""}`));
-  const fresh = [];
-  for (const m of meta) { const k = `${m.size}|${m.takenAt || ""}`; if (keys.has(k)) continue; keys.add(k); fresh.push(m); }
-  const dup = meta.length - fresh.length;
-  if (dup) notes.push(`${plural(dup, "doublon")} ignoré${dup > 1 ? "s" : ""}`);
-  // Limite : 30 photos par personne et par séjour.
+  // Année proposée : celle de la prise de vue la plus fréquente, sinon l'année affichée, sinon l'année en cours.
+  const counts = {}; meta.forEach(m => { if (m.takenAt) counts[m.takenAt.slice(0, 4)] = (counts[m.takenAt.slice(0, 4)] || 0) + 1; });
+  const exifYear = Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const evs = await allEvents();
+  const ctxEvent = ui.view === "event" ? evs.find(e => e.id === ui.eventId) : null;
+  const year = ctxEvent?.year || exifYear || ui.year || thisYear();
+  const yearWhy = ctxEvent ? `Année de l'événement « ${ctxEvent.title} ».` : exifYear ? `Année proposée d'après la date de prise de vue (${exifYear}).`
+    : ui.year ? `Pas de date de prise de vue : année ${ui.year} proposée.` : "Pas de date de prise de vue : année en cours proposée.";
+  const sameYear = evs.filter(e => e.year === year);
+  // Un événement est recommandé : on présélectionne celui de la page ouverte, sinon un événement de l'année proposée.
+  const selEvent = ctxEvent?.id || sameYear[0]?.id || null;
+  const mode = selEvent ? "event" : "year";
+  const urls = files.slice(0, 8).map(f => URL.createObjectURL(f));
+  ctx.openSheet(`
+    <h3>Ajouter ${plural(files.length, "photo")}</h3>
+    <div class="al-strip">${urls.map(u => `<img src="${u}" alt="">`).join("")}${files.length > 8 ? `<span class="al-more">+${files.length - 8}</span>` : ""}</div>
+    <p class="label">Ranger dans</p>
+    <label class="al-choice ${evs.length ? "" : "disabled"}">
+      <input type="radio" name="al-where" value="event" ${mode === "event" ? "checked" : ""} ${evs.length ? "" : "disabled"}>
+      <span><strong>Un événement</strong> <span class="al-reco">recommandé</span>
+        ${evs.length ? `<select id="al-event">${eventOptions(evs, selEvent || evs[0].id)}</select>` : `<span class="small muted">Aucun événement pour l'instant.</span>`}
+        <button type="button" class="link-btn" id="al-new-event">+ Créer un événement</button></span>
+    </label>
+    <label class="al-choice">
+      <input type="radio" name="al-where" value="year" ${mode === "year" ? "checked" : ""}>
+      <span><strong>Seulement une année</strong> <span class="small muted">« Autres photos »</span>
+        <input id="al-year" inputmode="numeric" maxlength="4" value="${esc(year)}" aria-label="Année"></span>
+    </label>
+    <p class="small muted al-exif">${esc(yearWhy)}</p>
+    <p class="error" id="al-error" hidden></p>
+    <div class="btn-row"><button type="button" class="btn" id="al-cancel">Annuler</button><button type="button" class="btn btn-primary" id="al-go">Ajouter</button></div>`,
+    () => urls.forEach(u => URL.revokeObjectURL(u)));
+  const where = () => document.querySelector('input[name="al-where"]:checked')?.value;
+  $("#al-event")?.addEventListener("change", () => { document.querySelector('input[name="al-where"][value="event"]').checked = true; });
+  $("#al-year").addEventListener("focus", () => { document.querySelector('input[name="al-where"][value="year"]').checked = true; });
+  $("#al-cancel").onclick = () => ctx.closeSheet();
+  $("#al-new-event").onclick = () => { ctx.closeSheet(); pendingMeta = meta; eventSheet(null, year); };
+  $("#al-go").onclick = () => {
+    const err = (m) => { const x = $("#al-error"); x.textContent = m; x.hidden = false; };
+    let target;
+    if (where() === "event") {
+      const ev = evs.find(e => e.id === $("#al-event").value);
+      if (!ev) return err("Choisissez un événement.");
+      target = { eventId: ev.id, year: ev.year, title: ev.title, coverId: ev.coverId };
+    } else {
+      const y = $("#al-year").value.trim();
+      if (!validYear(y)) return err("Indiquez l'année (4 chiffres).");
+      target = { eventId: null, year: y };
+    }
+    ctx.closeSheet();
+    uploadFiles(meta, target);
+  };
+}
+let pendingMeta = null; // photos choisies avant de créer un événement depuis la fenêtre d'ajout
+
+async function uploadFiles(meta, target) {
+  if (ui.upload) return;
+  const meM = ctx.me(), sid = ctx.state.spaceId;
+  const notes = [];
+  // Doublons : même taille de fichier et même date de prise de vue (dans tout l'album).
+  const fresh = [], seen = new Set();
+  for (const m of meta) {
+    const k = `${m.size}|${m.takenAt || ""}`;
+    if (seen.has(k)) continue;
+    let dup = false;
+    try { dup = (await store.photosWithSize(sid, m.size)).some(p => (p.takenAt || "") === (m.takenAt || "")); } catch { }
+    seen.add(k);
+    if (!dup) fresh.push(m);
+  }
+  const dupN = meta.length - fresh.length;
+  if (dupN) notes.push(`${plural(dupN, "doublon")} ignoré${dupN > 1 ? "s" : ""}`);
   let list = fresh;
-  if (a.kind === "stay") {
-    const left = Math.max(0, MAX_PER_PERSON - content.photos.filter(p => p.authorId === meM.id).length);
+  // Limite : 30 photos par personne et par événement.
+  if (target.eventId) {
+    let already = 0;
+    try { already = (await new Promise((res, rej) => { const u = store.subscribeEventPhotos(sid, target.eventId, (p) => { u(); res(p); }, rej); })).filter(p => p.authorId === meM.id).length; } catch { }
+    const left = Math.max(0, MAX_PER_PERSON - already);
     if (list.length > left) {
       list = list.slice(0, left);
       ctx.openSheet(`<h3>Gardez vos ${MAX_PER_PERSON} plus belles !</h3>
-        <p>Chacun peut mettre jusqu'à ${MAX_PER_PERSON} photos par séjour, pour que l'album reste agréable à parcourir (et que la place gratuite dure longtemps).</p>
-        <p class="muted">${left ? `Les ${plural(left, "première")} de votre sélection vont être ajoutées.` : "Vous avez déjà mis vos 30 photos dans ce séjour : supprimez-en une pour en ajouter une autre."}</p>
+        <p>Chacun peut mettre jusqu'à ${MAX_PER_PERSON} photos par événement, pour que l'album reste agréable à parcourir (et que la place gratuite dure longtemps).</p>
+        <p class="muted">${left ? `Les ${plural(left, "première")} de votre sélection vont être ajoutées.` : "Vous avez déjà mis vos 30 photos dans cet événement : supprimez-en une pour en ajouter une autre."}</p>
         <button class="btn btn-primary btn-block" id="al-ok">D'accord</button>`);
       $("#al-ok").onclick = () => ctx.closeSheet();
     }
   }
-  if (!list.length) { if (dup) ctx.toast(notes.join(" · ")); return; }
+  if (!list.length) { if (dupN) ctx.toast(notes.join(" · ")); return; }
+  // On affiche l'endroit où les photos arrivent.
+  Object.assign(ui, target.eventId ? { view: "event", year: target.year, eventId: target.eventId } : { view: "year", year: target.year, eventId: null });
   const steps = list.length * 2;
-  ui.upload = { albumId: a.id, eventId: target.eventId, done: 0, steps, label: `Préparation de la photo 1 sur ${list.length}…` };
+  ui.upload = { done: 0, steps, label: `Préparation de la photo 1 sur ${list.length}…` };
   const paint = () => {
     const bar = document.querySelector("#album-root .pl-upload .progress span"), lab = document.querySelector("#album-root .pl-upload .progress-label");
     if (bar) bar.style.width = Math.round(ui.upload.done / steps * 100) + "%";
     if (lab) lab.textContent = ui.upload.label;
   };
-  renderAlbum();
-  const doc = data.albums.find(x => x.id === a.id) || {};
-  let hasCover = !!doc.coverId, previews = (doc.previews || []).length;
-  const ev = target.eventId && content.events.find(e => e.id === target.eventId);
-  let evCover = !!ev?.coverId, ok = 0, ko = 0;
+  renderAlbum(); window.scrollTo(0, 0);
+  let previews = (data.years.find(y => y.id === target.year)?.previews || []).length, evCover = !!target.coverId, ok = 0, ko = 0;
   for (let i = 0; i < list.length; i++) {
     try {
       ui.upload.label = `Préparation de la photo ${i + 1} sur ${list.length}…`; paint();
       const { full, thumb } = await compress(list[i].f);
       ui.upload.done++; ui.upload.label = `Envoi de la photo ${i + 1} sur ${list.length}…`; paint();
-      const { done } = store.addAlbumPhoto(sid, { albumId: a.id, eventId: target.eventId, thumb, full, authorId: meM.id, authorName: meM.name,
-        takenAt: list[i].takenAt, srcSize: list[i].size }, { albumBase: albumBase(a), albumCover: !hasCover, preview: previews < 4, eventCover: !!target.eventId && !evCover });
+      const { done } = store.addAlbumPhoto(sid, { year: target.year, eventId: target.eventId, thumb, full, authorId: meM.id, authorName: meM.name,
+        takenAt: list[i].takenAt, srcSize: list[i].size }, { preview: previews < 4, eventCover: !!target.eventId && !evCover });
       await done;
-      hasCover = true; evCover = true; previews++; ok++;
+      previews++; evCover = true; ok++;
     } catch (e) { console.error(e); ko++; }
     ui.upload.done = (i + 1) * 2; paint();
   }
@@ -412,18 +451,27 @@ async function uploadFiles(files) {
   notes.unshift(`${plural(ok, "photo")} ajoutée${ok > 1 ? "s" : ""}`);
   if (ko) notes.push(`${ko} impossible${ko > 1 ? "s" : ""} à lire`);
   ctx.toast(notes.join(" · "));
+  // Garde-fou : beaucoup de photos en vrac dans une année → suggérer un événement.
+  if (!target.eventId && !hinted.has(target.year)) {
+    setTimeout(() => {
+      const loose = content.key === `${target.year}|` ? content.photos.length : 0;
+      if (loose > LOOSE_HINT && !hinted.has(target.year)) {
+        hinted.add(target.year);
+        ctx.openSheet(`<h3>Voulez-vous créer un événement pour les ranger ?</h3>
+          <p>Il y a ${loose} photos dans « Autres photos de ${esc(target.year)} ». Un événement (« Premier Noël », « Vacances à Biarritz »…) les rend plus faciles à retrouver.</p>
+          <div class="btn-row"><button class="btn" id="al-later">Plus tard</button><button class="btn btn-primary" id="al-create">Créer un événement</button></div>`);
+        $("#al-later").onclick = () => ctx.closeSheet();
+        $("#al-create").onclick = () => { ctx.closeSheet(); eventSheet(null, target.year); };
+      }
+    }, 900);
+  }
 }
 
 /* ---------- Visionneuse ---------- */
 const viewer = { open: false, ids: [], index: 0 };
-function scopePhotos() {
-  const evIds = new Set(content.events.map(e => e.id));
-  const list = ui.view === "event" ? content.photos.filter(p => p.eventId === ui.eventId) : content.photos.filter(p => !p.eventId || !evIds.has(p.eventId));
-  return list.sort(byTime);
-}
+const scopePhotos = () => [...(ui.view === "event" ? content.eventPhotos : content.photos)].sort(byTime);
 function openViewer(photoId) {
-  const list = scopePhotos();
-  viewer.ids = list.map(p => p.id); viewer.index = Math.max(0, viewer.ids.indexOf(photoId)); viewer.open = true;
+  viewer.ids = scopePhotos().map(p => p.id); viewer.index = Math.max(0, viewer.ids.indexOf(photoId)); viewer.open = true;
   $("#al-viewer").hidden = false; document.body.style.overflow = "hidden";
   renderViewer();
 }
@@ -435,17 +483,15 @@ function loadFull(id) {
   store.getAlbumFull(ctx.state.spaceId, id).then(d => { fulls.set(id, d); if (viewer.open && viewer.ids[viewer.index] === id) renderViewer(); }).catch(() => fulls.delete(id));
 }
 function renderViewer() {
-  // La liste suit les changements (photo supprimée ou déplacée par quelqu'un d'autre).
   const cur = viewer.ids[viewer.index];
   viewer.ids = scopePhotos().map(p => p.id);
   if (!viewer.ids.length) return closeViewer();
-  if (viewer.ids.includes(cur)) viewer.index = viewer.ids.indexOf(cur); else viewer.index = Math.min(viewer.index, viewer.ids.length - 1);
-  const p = content.photos.find(x => x.id === viewer.ids[viewer.index]);
-  const a = albumById(ui.albumId), ev = ui.view === "event" ? content.events.find(e => e.id === ui.eventId) : null;
+  viewer.index = viewer.ids.includes(cur) ? viewer.ids.indexOf(cur) : Math.min(viewer.index, viewer.ids.length - 1);
+  const p = scopePhotos().find(x => x.id === viewer.ids[viewer.index]);
+  const ev = ui.view === "event" ? content.events.find(e => e.id === ui.eventId) : null;
   const full = fulls.get(p.id);
   if (!full) loadFull(p.id);
   [-1, 1].forEach(k => { const o = viewer.ids[(viewer.index + k + viewer.ids.length) % viewer.ids.length]; if (o) loadFull(o); });
-  const isCover = ev ? ev.coverId === p.id : a?.coverId === p.id;
   const n = viewer.ids.length;
   const when = p.takenAt ? `prise le ${dayText(Date.parse(p.takenAt))}` : `ajoutée le ${dayText(tsMs(p.createdAt))}`;
   $("#al-viewer").innerHTML = `
@@ -459,21 +505,19 @@ function renderViewer() {
       ${p.caption ? `<p class="pv-caption">${esc(p.caption)}</p>` : ""}
       <p class="pv-author">Photo de <strong>${esc(nameOf(p.authorId, p.authorName))}</strong> · ${esc(when)}</p>
       <div class="pv-actions">
-        ${isCover ? `<span class="pv-chip">✓ Couverture</span>` : `<button class="pv-chip" data-pv="cover">Mettre en couverture</button>`}
+        ${ev ? (ev.coverId === p.id ? `<span class="pv-chip">✓ Couverture</span>` : `<button class="pv-chip" data-pv="cover">Mettre en couverture</button>`) : ""}
         ${mine(p) ? `<button class="pv-chip" data-pv="caption">${p.caption ? "Modifier la légende" : "Légende"}</button>
-          ${content.events.length ? `<button class="pv-chip" data-pv="move">Déplacer</button>` : ""}
+          <button class="pv-chip" data-pv="move">Déplacer</button>
           <button class="pv-chip pv-danger" data-pv="delete">Supprimer</button>` : ""}
       </div>
     </div>`;
 }
 function nextCover(list, removedId) { const o = list.filter(x => x.id !== removedId).sort(byTime)[0]; return o ? { id: o.id, thumb: o.thumb } : null; }
 async function viewerAction(act) {
-  const p = content.photos.find(x => x.id === viewer.ids[viewer.index]); if (!p) return;
-  const sid = ctx.state.spaceId, a = albumById(ui.albumId);
+  const p = scopePhotos().find(x => x.id === viewer.ids[viewer.index]); if (!p) return;
+  const sid = ctx.state.spaceId;
   if (act === "cover") {
-    const ev = ui.view === "event" ? content.events.find(e => e.id === ui.eventId) : null;
-    (ev ? store.updateAlbumEvent(sid, ev.id, { coverId: p.id, cover: p.thumb }) : store.saveAlbum(sid, a.id, { ...albumBase(a), coverId: p.id, cover: p.thumb }))
-      .then(() => ctx.toast(ev ? "Couverture de l'événement" : "Couverture de l'album")).catch(fail);
+    store.setEventCover(sid, ui.eventId, p).then(() => { ctx.toast("Couverture de l'événement"); renderViewer(); }).catch(fail);
     return;
   }
   if (act === "caption") {
@@ -484,33 +528,44 @@ async function viewerAction(act) {
   }
   if (act === "move") {
     closeViewer();
-    const opts = [{ id: "", label: a.kind === "stay" ? "Photos du séjour (aucun événement)" : "Autres photos (aucun événement)" },
-      ...content.events.map(e => ({ id: e.id, label: e.title + (e.date ? " · " + dm(e.date) : "") }))];
-    ctx.openSheet(`<h3>Déplacer la photo</h3>
-      <div class="al-move">${opts.map(o => `<button class="btn btn-block ${o.id === (p.eventId || "") ? "btn-primary" : ""}" data-move="${esc(o.id)}">${esc(o.label)}</button>`).join("")}</div>
-      <button class="btn btn-ghost btn-block" id="al-cancel">Annuler</button>`);
-    $("#al-cancel").onclick = () => ctx.closeSheet();
-    document.querySelectorAll("[data-move]").forEach(b => b.onclick = () => {
-      const to = b.dataset.move || null; ctx.closeSheet();
-      if (to === (p.eventId || null)) return;
-      const from = p.eventId && content.events.find(e => e.id === p.eventId), dest = to && content.events.find(e => e.id === to);
+    const evs = await allEvents();
+    ctx.openSheet(`
+      <h3>Déplacer la photo</h3>
+      <label class="al-choice"><input type="radio" name="mv" value="event" ${p.eventId ? "checked" : ""} ${evs.length ? "" : "disabled"}>
+        <span><strong>Vers un événement</strong>${evs.length ? `<select id="mv-event">${eventOptions(evs, p.eventId || evs[0].id)}</select>` : `<span class="small muted">Aucun événement.</span>`}</span></label>
+      <label class="al-choice"><input type="radio" name="mv" value="year" ${p.eventId ? "" : "checked"}>
+        <span><strong>Vers « Autres photos » d'une année</strong><input id="mv-year" inputmode="numeric" maxlength="4" value="${esc(p.year)}" aria-label="Année"></span></label>
+      <p class="error" id="mv-error" hidden></p>
+      <div class="btn-row"><button class="btn" id="mv-cancel">Annuler</button><button class="btn btn-primary" id="mv-ok">Déplacer</button></div>`);
+    $("#mv-event")?.addEventListener("change", () => { document.querySelector('input[name="mv"][value="event"]').checked = true; });
+    $("#mv-year").addEventListener("focus", () => { document.querySelector('input[name="mv"][value="year"]').checked = true; });
+    $("#mv-cancel").onclick = () => ctx.closeSheet();
+    $("#mv-ok").onclick = () => {
+      const toEvent = document.querySelector('input[name="mv"]:checked').value === "event";
+      const dest = toEvent ? evs.find(e => e.id === $("#mv-event").value) : null;
+      const to = toEvent ? { eventId: dest.id, year: dest.year } : { eventId: null, year: $("#mv-year").value.trim() };
+      if (!validYear(to.year)) { const x = $("#mv-error"); x.textContent = "Indiquez l'année (4 chiffres)."; x.hidden = false; return; }
+      ctx.closeSheet();
+      if (to.eventId === (p.eventId || null) && to.year === p.year) return;
+      const from = p.eventId && content.events.find(e => e.id === p.eventId);
+      const toYear = data.years.find(y => y.id === to.year);
       store.moveAlbumPhoto(sid, p, to, {
-        fromEventCover: from && from.coverId === p.id ? nextCover(content.photos.filter(x => x.eventId === from.id), p.id) : undefined,
+        fromEventCover: from && from.coverId === p.id ? nextCover(content.eventPhotos, p.id) : undefined,
         toEventCover: !!dest && !dest.coverId,
-      }).then(() => ctx.toast(to ? `Photo rangée dans « ${dest.title} »` : "Photo remise dans le séjour")).catch(fail);
-    });
+        preview: (toYear?.previews || []).length < 4,
+      }).then(() => ctx.toast(dest ? `Photo rangée dans « ${dest.title} »` : `Photo rangée dans « Autres photos de ${to.year} »`)).catch(fail);
+    };
     return;
   }
   if (act === "delete") {
     closeViewer();
     if (!(await ctx.confirmBox("Supprimer cette photo ?", `Photo ajoutée par ${nameOf(p.authorId, p.authorName)}. Elle sera supprimée pour toute la famille.`))) return openViewer(p.id);
     const ev = p.eventId && content.events.find(e => e.id === p.eventId);
-    store.deleteAlbumPhoto(sid, p, {
-      albumCover: a.coverId === p.id ? nextCover(content.photos, p.id) : undefined,
-      eventCover: ev && ev.coverId === p.id ? nextCover(content.photos.filter(x => x.eventId === ev.id), p.id) : undefined,
-    }).then(() => ctx.toast("Photo supprimée")).catch(fail);
+    store.deleteAlbumPhoto(sid, p, { eventCover: ev && ev.coverId === p.id ? nextCover(content.eventPhotos, p.id) : undefined })
+      .then(() => ctx.toast("Photo supprimée")).catch(fail);
   }
 }
+
 function initViewer() {
   const el = document.createElement("div");
   el.id = "al-viewer"; el.className = "pv"; el.hidden = true;
@@ -538,69 +593,29 @@ function initViewer() {
   });
 }
 
+
 /* ---------- Actions ---------- */
 async function onClick(e) {
   const b = e.target.closest("[data-act]"); if (!b || b.disabled) return;
   const id = b.dataset.id, sid = ctx.state.spaceId;
   const top = () => window.scrollTo(0, 0);
   switch (b.dataset.act) {
-    case "open-year": Object.assign(ui, { view: "year", year: id }); renderAlbum(); return top();
-    case "open-album": Object.assign(ui, { view: "album", albumId: id, eventId: null }); if (id === SOUVENIRS) ui.year = null; renderAlbum(); return top();
-    case "first-photos": Object.assign(ui, { view: "album", albumId: id, eventId: null }); renderAlbum(); top(); return pick(id, null);
+    case "open-year": Object.assign(ui, { view: "year", year: id, eventId: null }); renderAlbum(); return top();
     case "open-event": Object.assign(ui, { view: "event", eventId: id }); renderAlbum(); return top();
-    case "back-years": Object.assign(ui, { view: "years", year: null, albumId: null, eventId: null }); renderAlbum(); return top();
-    case "back-year": Object.assign(ui, { view: "year", albumId: null, eventId: null }); renderAlbum(); return top();
-    case "back-album": Object.assign(ui, { view: "album", eventId: null }); renderAlbum(); return top();
-    case "pick": return pick(ui.albumId, ui.view === "event" ? ui.eventId : null);
+    case "back-years": Object.assign(ui, { view: "years", year: null, eventId: null }); renderAlbum(); return top();
+    case "back-year": Object.assign(ui, { view: "year", eventId: null }); renderAlbum(); return top();
+    case "pick": return pick();
     case "view": return openViewer(id);
-    case "new-event": return eventSheet(albumById(ui.albumId), null);
-    case "rename-album": {
-      const a = albumById(ui.albumId); if (!a) return;
-      return textSheet("Titre de l'album", a.kind === "stay" ? `Titre (vide = « ${a.autoTitle} »)` : "Titre", a.kind === "stay" && a.title === a.autoTitle ? "" : a.title, "Enregistrer", 80, (v) => {
-        ctx.closeSheet(); store.saveAlbum(sid, a.id, { ...albumBase(a), title: v || null }).catch(fail);
-      });
-    }
-    case "edit-event": { const ev = content.events.find(x => x.id === ui.eventId); return ev && mine(ev) && eventSheet(albumById(ui.albumId), ev); }
+    case "new-event": return eventSheet(null, ui.view === "year" ? ui.year : "");
+    case "edit-event": { const ev = content.events.find(x => x.id === ui.eventId); return ev && mine(ev) && eventSheet(ev); }
     case "delete-event": {
       const ev = content.events.find(x => x.id === ui.eventId); if (!ev || !mine(ev)) return;
-      const ph = content.photos.filter(p => p.eventId === ev.id);
-      if (!(await ctx.confirmBox("Supprimer l'événement ?", `« ${ev.title} » sera supprimé.${ph.length === 1 ? " Sa photo reste dans l'album." : ph.length ? ` Ses ${ph.length} photos restent dans l'album.` : ""}`))) return;
-      Object.assign(ui, { view: "album", eventId: null }); renderAlbum();
-      return store.deleteAlbumEvent(sid, ev.id, ph.map(p => p.id)).then(() => ctx.toast("Événement supprimé")).catch(fail);
+      const ph = content.eventPhotos;
+      if (!(await ctx.confirmBox("Supprimer l'événement ?", `« ${ev.title} » sera supprimé.${ph.length === 1 ? ` Sa photo reste dans « Autres photos de ${ev.year} ».` : ph.length ? ` Ses ${ph.length} photos restent dans « Autres photos de ${ev.year} ».` : ""}`))) return;
+      Object.assign(ui, { view: "year", eventId: null }); renderAlbum();
+      return store.deleteAlbumEvent(sid, ev, ph.map(p => p.id)).then(() => ctx.toast("Événement supprimé")).catch(fail);
     }
   }
-}
-
-/* ---------- Séjour supprimé ---------- */
-/** Avant de supprimer un séjour : s'il a des photos, demande s'il faut les garder. Renvoie false pour annuler. */
-export async function beforeStayDelete(stay) {
-  const sid = ctx.state.spaceId, id = stayAlbumId(stay.id);
-  let a = null;
-  try { a = await store.getAlbum(sid, id); } catch { }
-  const n = a?.count || 0;
-  if (!n) { if (a) store.deleteAlbumAll(sid, id).catch(() => { }); return true; }
-  return new Promise((resolve) => {
-    let done = false;
-    ctx.openSheet(`
-      <h3>Ce séjour contient ${plural(n, "photo")}</h3>
-      <p>Les garder dans l'album ? L'album restera, marqué « séjour supprimé ».</p>
-      <button class="btn btn-primary btn-block" id="sd-keep">Garder les photos</button>
-      <button class="btn btn-danger-ghost btn-block" id="sd-all" style="margin-top:10px">Tout supprimer (séjour et photos)</button>
-      <button class="btn btn-ghost btn-block" id="sd-cancel">Annuler</button>`, () => { if (!done) resolve(false); });
-    $("#sd-cancel").onclick = () => { done = true; ctx.closeSheet(); resolve(false); };
-    $("#sd-keep").onclick = () => {
-      done = true; ctx.closeSheet();
-      const al = albumById(id) || {};
-      store.saveAlbum(sid, id, { kind: "stay", stayId: stay.id, deleted: true, autoTitle: al.autoTitle || autoTitle(stay), start: stay.start, end: stay.end, year: stay.start.slice(0, 4) }).catch(fail);
-      resolve(true);
-    };
-    $("#sd-all").onclick = async () => {
-      done = true; ctx.closeSheet();
-      if (!(await ctx.confirmBox("Tout supprimer ?", `Le séjour et ses ${plural(n, "photo")} seront supprimés pour toute la famille. Cette action est définitive.`))) return resolve(false);
-      store.deleteAlbumAll(sid, id).catch(fail);
-      resolve(true);
-    };
-  });
 }
 
 /* ---------- Réglages : administrateur et place disponible ---------- */
@@ -663,14 +678,14 @@ function adminSheet(mode) {
   };
 }
 
+
 export function initAlbum(context) {
   ctx = context;
-  const root = $("#album-root");
-  root.addEventListener("click", onClick);
+  $("#album-root").addEventListener("click", onClick);
   const input = document.createElement("input");
   Object.assign(input, { type: "file", id: "al-files", accept: "image/*", multiple: true, hidden: true });
   document.body.appendChild(input);
-  input.addEventListener("change", () => { if (input.files.length) uploadFiles([...input.files]); });
+  input.addEventListener("change", () => { if (input.files.length) addSheet([...input.files]); });
   $("#settings-album")?.addEventListener("click", (e) => {
     const b = e.target.closest("[data-adm]"); if (!b) return;
     if (b.dataset.adm === "off") { try { localStorage.removeItem(LS_ADMIN); } catch { } ctx.toast("Mode administrateur désactivé"); renderSettingsExtras(); update(); return; }

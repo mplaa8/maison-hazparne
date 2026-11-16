@@ -173,7 +173,7 @@ export async function moveSpace(oldId, newId) {
 /* ---------- Mémo : code wifi, points d'attention, check-lists ---------- */
 // Tout est rangé sous /spaces/{id}, comme le planning : rien n'est dans le code source ni dans le dépôt.
 const ALL_COLLECTIONS = ["members", "stays", "notes", "checkItems", "checks", "memo", "infos", "places", "ratings", "placePhotos", "placePhotoFull",
-  "albums", "albumEvents", "albumPhotos", "albumPhotoFull", "settings"];
+  "albumYears", "albumEvents", "albumPhotos", "albumPhotoFull", "settings"];
 const col = (id, name) => collection(getDb(), "spaces", id, name);
 
 /** Écoute en temps réel du Mémo. onError reçoit l'erreur (ex. règles Firestore pas encore mises à jour). */
@@ -317,24 +317,39 @@ export function setCover(id, placeId, photo) {
   return updateDoc(doc(col(id, "places"), placeId), { coverId: photo.id, cover: photo.thumb, updatedAt: serverTimestamp() });
 }
 
-/* ---------- Album : photos de famille ----------
-   albums/{albumId}        : « stay_<idSéjour> » (un album par séjour, créé à la première utilisation)
-                             ou « souvenirs » (Souvenirs d'autrefois). Titre, couverture, compteurs.
-   albumEvents/{id}        : événement dans un album (titre, date, couverture, compteur).
-   albumPhotos/{id}        : miniature + infos (auteur, dates, légende, événement).
-   albumPhotoFull/{id}     : photo complète, chargée seulement à l'ouverture. */
-export function subscribeAlbums(id, onAlbums, onError) {
-  return onSnapshot(col(id, "albums"), (qs) => onAlbums(qs.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => onError && onError(e));
+/* ---------- Album : photos de famille (années › événements › photos) ----------
+   albumYears/{AAAA}  : synthèse d'une année (nombre de photos, d'événements, aperçus) : la liste des
+                        années reste légère, même avec des milliers de photos.
+   albumEvents/{id}   : événement (titre, année, mois et jour facultatifs, couverture, nombre de photos).
+   albumPhotos/{id}   : miniature + infos (année, événement, auteur, dates, légende).
+   albumPhotoFull/{id}: photo complète, chargée seulement à l'ouverture.
+   Aucun lien avec le planning ni les séjours. */
+const yearRef = (id, y) => doc(col(id, "albumYears"), String(y));
+export function subscribeAlbumYears(id, onYears, onError) {
+  return onSnapshot(col(id, "albumYears"), (qs) => onYears(qs.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => onError && onError(e));
 }
-export function subscribeAlbumContent(id, albumId, { onEvents, onPhotos, onError }) {
+/** Contenu d'une année : ses événements et ses « Autres photos » (photos sans événement). */
+export function subscribeYear(id, year, { onEvents, onPhotos, onError }) {
   const err = (e) => onError && onError(e);
-  const u1 = onSnapshot(query(col(id, "albumEvents"), where("albumId", "==", albumId)), (qs) => onEvents(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err);
-  const u2 = onSnapshot(query(col(id, "albumPhotos"), where("albumId", "==", albumId)), (qs) => onPhotos(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err);
+  const u1 = onSnapshot(query(col(id, "albumEvents"), where("year", "==", String(year))), (qs) => onEvents(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err);
+  const u2 = onSnapshot(query(col(id, "albumPhotos"), where("year", "==", String(year)), where("eventId", "==", null)), (qs) => onPhotos(qs.docs.map(d => ({ id: d.id, ...d.data() }))), err);
   return () => { u1(); u2(); };
 }
-export async function getAlbum(id, albumId) {
-  const s = await getDoc(doc(col(id, "albums"), albumId));
-  return s.exists() ? { id: s.id, ...s.data() } : null;
+export function subscribeEventPhotos(id, eventId, onPhotos, onError) {
+  return onSnapshot(query(col(id, "albumPhotos"), where("eventId", "==", eventId)), (qs) => onPhotos(qs.docs.map(d => ({ id: d.id, ...d.data() }))), (e) => onError && onError(e));
+}
+export async function listAlbumEvents(id) {
+  const qs = await getDocs(col(id, "albumEvents"));
+  return qs.docs.map(d => { const { cover, ...rest } = d.data(); return { id: d.id, ...rest }; });
+}
+/** Photos de même taille (détection des doublons à l'envoi). */
+export async function photosWithSize(id, size) {
+  const qs = await getDocs(query(col(id, "albumPhotos"), where("srcSize", "==", size)));
+  return qs.docs.map(d => ({ id: d.id, takenAt: d.data().takenAt || null }));
+}
+export async function yearSample(id, year) {
+  const qs = await getDocs(query(col(id, "albumPhotos"), where("year", "==", String(year))));
+  return qs.docs.slice(0, 4).map(d => ({ id: d.id, thumb: d.data().thumb }));
 }
 export async function getAlbumThumb(id, photoId) {
   const s = await getDoc(doc(col(id, "albumPhotos"), photoId));
@@ -344,39 +359,48 @@ export async function getAlbumFull(id, photoId) {
   const s = await getDoc(doc(col(id, "albumPhotoFull"), photoId));
   return s.exists() ? s.data().data : null;
 }
-/** Crée ou complète l'album (fusion). */
-export function saveAlbum(id, albumId, data) {
-  return setDoc(doc(col(id, "albums"), albumId), { ...data, updatedAt: serverTimestamp() }, { merge: true });
-}
-export function addAlbumEvent(id, albumId, albumBase, { title, date, authorId, authorName }) {
+
+export function addAlbumEvent(id, { title, year, month, day, authorId, authorName }) {
   const ref = doc(col(id, "albumEvents"));
   const b = writeBatch(getDb());
-  b.set(doc(col(id, "albums"), albumId), { ...albumBase, updatedAt: serverTimestamp() }, { merge: true });
-  b.set(ref, { albumId, title, date, authorId, authorName, count: 0, coverId: null, cover: null, createdAt: serverTimestamp() });
+  b.set(ref, { title, year: String(year), month: month || null, day: day || null, authorId, authorName, count: 0, coverId: null, cover: null, createdAt: serverTimestamp() });
+  b.set(yearRef(id, year), { events: increment(1), updatedAt: serverTimestamp() }, { merge: true });
   return { id: ref.id, done: b.commit() };
 }
-export function updateAlbumEvent(id, eventId, data) { return updateDoc(doc(col(id, "albumEvents"), eventId), data); }
-/** Supprime l'événement ; ses photos reviennent dans l'album du séjour. */
-export async function deleteAlbumEvent(id, eventId, photoIds) {
-  const refs = [...photoIds];
-  for (let i = 0; i < Math.max(1, refs.length); i += 400) {
+/** Modifie un événement ; si l'année change, ses photos changent d'année avec lui. */
+export async function updateAlbumEvent(id, ev, data, photos = []) {
+  const b = writeBatch(getDb());
+  b.update(doc(col(id, "albumEvents"), ev.id), data);
+  if (data.year && String(data.year) !== String(ev.year)) {
+    const n = photos.length;
+    b.set(yearRef(id, ev.year), { events: increment(-1), count: increment(-n), previews: arrayRemove(...photos.map(p => p.id).concat("_")), updatedAt: serverTimestamp() }, { merge: true });
+    b.set(yearRef(id, data.year), { events: increment(1), count: increment(n), updatedAt: serverTimestamp() }, { merge: true });
+    photos.slice(0, 400).forEach(p => b.update(doc(col(id, "albumPhotos"), p.id), { year: String(data.year) }));
+  }
+  return b.commit();
+}
+/** Supprime l'événement : ses photos restent dans « Autres photos » de son année. */
+export async function deleteAlbumEvent(id, ev, photoIds) {
+  for (let i = 0; i < Math.max(1, photoIds.length); i += 400) {
     const b = writeBatch(getDb());
-    refs.slice(i, i + 400).forEach(pid => b.update(doc(col(id, "albumPhotos"), pid), { eventId: null }));
-    if (i + 400 >= refs.length) b.delete(doc(col(id, "albumEvents"), eventId));
+    photoIds.slice(i, i + 400).forEach(pid => b.update(doc(col(id, "albumPhotos"), pid), { eventId: null }));
+    if (i + 400 >= photoIds.length) {
+      b.delete(doc(col(id, "albumEvents"), ev.id));
+      b.set(yearRef(id, ev.year), { events: increment(-1), updatedAt: serverTimestamp() }, { merge: true });
+    }
     await b.commit();
   }
 }
-export function addAlbumPhoto(id, p, { albumBase, albumCover, preview, eventCover }) {
+export function addAlbumPhoto(id, p, { preview, eventCover }) {
   const ref = doc(col(id, "albumPhotos"));
-  const bytes = p.thumb.length + p.full.length;
+  const bytes = p.thumb.length + p.full.length, year = String(p.year);
   const b = writeBatch(getDb());
-  b.set(doc(col(id, "albumPhotoFull"), ref.id), { albumId: p.albumId, data: p.full });
-  b.set(ref, { albumId: p.albumId, eventId: p.eventId || null, thumb: p.thumb, authorId: p.authorId, authorName: p.authorName,
+  b.set(doc(col(id, "albumPhotoFull"), ref.id), { year, data: p.full });
+  b.set(ref, { year, eventId: p.eventId || null, thumb: p.thumb, authorId: p.authorId, authorName: p.authorName,
     takenAt: p.takenAt || null, srcSize: p.srcSize || 0, caption: "", bytes, createdAt: serverTimestamp() });
-  const a = { ...albumBase, count: increment(1), bytes: increment(bytes), updatedAt: serverTimestamp() };
-  if (albumCover) Object.assign(a, { coverId: ref.id, cover: p.thumb });
-  if (preview) a.previews = arrayUnion(ref.id);
-  b.set(doc(col(id, "albums"), p.albumId), a, { merge: true });
+  const y = { count: increment(1), updatedAt: serverTimestamp() };
+  if (preview) y.previews = arrayUnion(ref.id);
+  b.set(yearRef(id, year), y, { merge: true });
   if (p.eventId) {
     const e = { count: increment(1) };
     if (eventCover) Object.assign(e, { coverId: ref.id, cover: p.thumb });
@@ -385,29 +409,35 @@ export function addAlbumPhoto(id, p, { albumBase, albumCover, preview, eventCove
   return { id: ref.id, done: b.commit() };
 }
 export function updateAlbumPhoto(id, photoId, data) { return updateDoc(doc(col(id, "albumPhotos"), photoId), data); }
-/** Déplace une photo entre le séjour (eventId null) et un événement. */
-export function moveAlbumPhoto(id, photo, toEventId, { fromEventCover, toEventCover }) {
+export function setEventCover(id, eventId, photo) { return updateDoc(doc(col(id, "albumEvents"), eventId), { coverId: photo.id, cover: photo.thumb }); }
+/** Déplace une photo vers un autre événement ou une autre année (« Autres photos »). */
+export function moveAlbumPhoto(id, photo, to, { fromEventCover, toEventCover, preview }) {
   const b = writeBatch(getDb());
-  b.update(doc(col(id, "albumPhotos"), photo.id), { eventId: toEventId || null });
-  if (photo.eventId) {
+  const toYear = String(to.year);
+  b.update(doc(col(id, "albumPhotos"), photo.id), { eventId: to.eventId || null, year: toYear });
+  if (photo.eventId && photo.eventId !== to.eventId) {
     const e = { count: increment(-1) };
     if (fromEventCover !== undefined) Object.assign(e, { coverId: fromEventCover?.id || null, cover: fromEventCover?.thumb || null });
     b.update(doc(col(id, "albumEvents"), photo.eventId), e);
   }
-  if (toEventId) {
+  if (to.eventId && photo.eventId !== to.eventId) {
     const e = { count: increment(1) };
     if (toEventCover) Object.assign(e, { coverId: photo.id, cover: photo.thumb });
-    b.update(doc(col(id, "albumEvents"), toEventId), e);
+    b.update(doc(col(id, "albumEvents"), to.eventId), e);
+  }
+  if (String(photo.year) !== toYear) {
+    b.set(yearRef(id, photo.year), { count: increment(-1), previews: arrayRemove(photo.id), updatedAt: serverTimestamp() }, { merge: true });
+    const y = { count: increment(1), updatedAt: serverTimestamp() };
+    if (preview) y.previews = arrayUnion(photo.id);
+    b.set(yearRef(id, toYear), y, { merge: true });
   }
   return b.commit();
 }
-export function deleteAlbumPhoto(id, photo, { albumCover, eventCover }) {
+export function deleteAlbumPhoto(id, photo, { eventCover }) {
   const b = writeBatch(getDb());
   b.delete(doc(col(id, "albumPhotos"), photo.id));
   b.delete(doc(col(id, "albumPhotoFull"), photo.id));
-  const a = { count: increment(-1), bytes: increment(-(photo.bytes || 0)), previews: arrayRemove(photo.id), updatedAt: serverTimestamp() };
-  if (albumCover !== undefined) Object.assign(a, { coverId: albumCover?.id || null, cover: albumCover?.thumb || null });
-  b.update(doc(col(id, "albums"), photo.albumId), a);
+  b.set(yearRef(id, photo.year), { count: increment(-1), previews: arrayRemove(photo.id), updatedAt: serverTimestamp() }, { merge: true });
   if (photo.eventId) {
     const e = { count: increment(-1) };
     if (eventCover !== undefined) Object.assign(e, { coverId: eventCover?.id || null, cover: eventCover?.thumb || null });
@@ -415,19 +445,40 @@ export function deleteAlbumPhoto(id, photo, { albumCover, eventCover }) {
   }
   return b.commit();
 }
-/** Supprime un album entier : photos, événements, album. */
-export async function deleteAlbumAll(id, albumId) {
-  const [ph, ev] = await Promise.all([
-    getDocs(query(col(id, "albumPhotos"), where("albumId", "==", albumId))),
-    getDocs(query(col(id, "albumEvents"), where("albumId", "==", albumId))),
-  ]);
-  const refs = [...ph.docs.flatMap(x => [x.ref, doc(col(id, "albumPhotoFull"), x.id)]), ...ev.docs.map(x => x.ref)];
-  for (let i = 0; i < refs.length; i += 400) {
+/** Recalcule les synthèses des années (et donne une année aux photos et événements qui n'en ont pas,
+ *  par ex. ceux de la première version de l'Album). Lancé automatiquement si besoin. */
+export async function rebuildAlbumYears(id) {
+  const [ph, ev, yrs] = await Promise.all([getDocs(col(id, "albumPhotos")), getDocs(col(id, "albumEvents")), getDocs(col(id, "albumYears"))]);
+  const yearOfMs = (ms) => String(new Date(ms).getFullYear());
+  const ts = (t) => (t?.toMillis ? t.toMillis() : Date.now());
+  const years = new Map(), fixes = [];
+  const Y = (y) => { if (!years.has(y)) years.set(y, { count: 0, events: 0, previews: [] }); return years.get(y); };
+  const evYear = new Map();
+  for (const d of ev.docs) {
+    const e = d.data(); let y = e.year || (e.date ? e.date.slice(0, 4) : yearOfMs(ts(e.createdAt)));
+    evYear.set(d.id, y); Y(y).events++;
+    if (!e.year) { const m = e.date ? Number(e.date.slice(5, 7)) : null, dd = e.date ? Number(e.date.slice(8, 10)) : null; fixes.push([d.ref, { year: y, month: m, day: dd }]); }
+  }
+  for (const d of ph.docs) {
+    const p = d.data();
+    let y = p.eventId && evYear.get(p.eventId) || p.year || (p.takenAt ? p.takenAt.slice(0, 4) : yearOfMs(ts(p.createdAt)));
+    const eventId = p.eventId && evYear.has(p.eventId) ? p.eventId : null;
+    const r = Y(y); r.count++; if (r.previews.length < 4) r.previews.push(d.id);
+    if (p.year !== y || (p.eventId || null) !== eventId) fixes.push([d.ref, { year: y, eventId }]);
+  }
+  const writes = [...fixes.map(([r, data]) => ["u", r, data])];
+  for (const d of yrs.docs) if (!years.has(d.id)) writes.push(["d", d.ref]);
+  for (const [y, v] of years) writes.push(["s", yearRef(id, y), { ...v, updatedAt: serverTimestamp() }]);
+  for (let i = 0; i < writes.length; i += 400) {
     const b = writeBatch(getDb());
-    refs.slice(i, i + 400).forEach(r => b.delete(r));
+    writes.slice(i, i + 400).forEach(([k, r, data]) => (k === "u" ? b.update(r, data) : k === "d" ? b.delete(r) : b.set(r, data)));
     await b.commit();
   }
-  await deleteDoc(doc(col(id, "albums"), albumId));
+  return years.size;
+}
+export async function albumCounts(id) {
+  const [a, y] = await Promise.all([getAggregateFromServer(col(id, "albumPhotos"), { n: count() }), getAggregateFromServer(col(id, "albumYears"), { n: count() })]);
+  return { photos: a.data().n, years: y.data().n };
 }
 
 /* ---------- Mode administrateur ----------

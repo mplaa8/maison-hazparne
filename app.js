@@ -3,7 +3,7 @@ import { initAgenda, renderAgenda, setAgendaDates } from "./agenda.js";
 import { initMemo, renderMemo, startMemo, stopMemo, openNotesCount } from "./memo.js";
 import { initPlaces, renderPlaces, stopPlaces, agendaMode } from "./places.js";
 import { applySeason } from "./saisons.js";
-import { initAlbum, renderAlbum, stopAlbum, beforeStayDelete, renderSettingsExtras } from "./album.js";
+import { initAlbum, renderAlbum, stopAlbum, renderSettingsExtras } from "./album.js";
 
 /* ---------- Constantes & utilitaires ---------- */
 // Couleurs douces des membres (affichage). Les anciennes couleurs vives déjà
@@ -709,8 +709,6 @@ function openStayEditor(stay) {
       const name = memberById(stay.memberId)?.name || "cette personne";
       const ok = await confirmBox("Supprimer ce séjour ?", `Séjour de ${name}, ${rangeText(stay.start, stay.end)}. Cette action est définitive.`);
       if (!ok) return;
-      // Album : s'il y a des photos, on demande s'il faut les garder.
-      if (!(await beforeStayDelete(stay))) return;
       store.deleteStay(state.spaceId, stay.id).catch(ex => { console.error(ex); toast("Erreur de suppression."); });
       toast("Séjour supprimé");
     };
